@@ -1,0 +1,35 @@
+product: jvm/app
+
+dependencies:
+  - $ktor.serialization.kotlinx.json
+  - $ktor.server.auth
+  - $ktor.server.auth.jwt
+  - $ktor.server.callLogging
+  - $ktor.server.contentNegotiation
+  - $ktor.server.core
+  - $ktor.server.metrics.micrometer
+  - $ktor.server.netty
+  - $ktor.server.routingOpenapi
+  - $ktor.server.sessions
+  - $ktor.server.swagger
+  - $libs.exposed.core
+  - $libs.exposed.r2dbc
+  - $libs.h2database.h2
+  - $libs.h2database.r2dbc
+  - $libs.koin.ktor
+  - $libs.koin.loggerSlf4j
+  - $libs.logback.classic
+  - $libs.micrometer.registryPrometheus
+  - $libs.openfolder.kotlinAsyncapiKtor
+  - $libs.postgresql
+  - $libs.ucasoft.ktorSimpleCache
+  - $libs.ucasoft.ktorSimpleRedisCache
+
+test-dependencies:
+  - $ktor.server.testHost
+
+settings:
+  ktor: enabled
+  kotlin:
+    serialization: enabled
+
