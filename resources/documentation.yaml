@@ -1,23 +1,23 @@
 openapi: "3.0.3"
 info:
-  title: "Application API"
-  description: "Application API"
-  version: "1.0.0"
+  title: "Dental PMS API"
+  description: "Dental clinic practice management system API"
+  version: "0.1.0"
 servers:
   - url: "http://0.0.0.0:8080"
 paths:
-  /:
+  /health:
     get:
-      description: "Hello World!"
+      description: "Liveness probe"
       responses:
         "200":
           description: "OK"
           content:
-            text/plain:
+            application/json:
               schema:
-                type: "string"
-              examples:
-                Example#1:
-                  value: "Hello World!"
+                type: "object"
+                properties:
+                  status:
+                    type: "string"
 components:
   schemas: { }

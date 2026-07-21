@@ -8,12 +8,11 @@ import kotlin.test.*
 class ServerTest {
 
     @Test
-    fun `test root endpoint`() = testApplication {
+    fun `health endpoint reports ok`() = testApplication {
         application {
             rootModule()
         }
-        // verify server root returns 200
-        assertEquals(HttpStatusCode.OK, client.get("/").status)
+        assertEquals(HttpStatusCode.OK, client.get("/health").status)
     }
 
 }

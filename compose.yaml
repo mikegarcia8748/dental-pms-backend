@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+    image: dental-pms:latest
+    env_file:
+      # Optional: absent in CI or when everything comes from the shell environment.
+      # `required` needs Compose v2.24+; drop the block if you are on something older.
+      - path: .env
+        required: false
+    environment:
+      # Fixed inside the container regardless of what .env says — the host-side port
+      # is what you change (see `ports` below).
+      SERVER_HOST: 0.0.0.0
+      PORT: 8080
+    ports:
+      # Published on every host interface, so other machines on the LAN can reach
+      # http://<your-lan-ip>:8080. Use "127.0.0.1:8080:8080" to keep it local-only.
+      - "${HOST_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  # Optional local PostgreSQL for offline development, in place of Neon.
+  # Start with: docker compose --profile local-db up
+  # Then point DATABASE_URL at jdbc:postgresql://db:5432/dental_pms (from the app
+  # container) or jdbc:postgresql://localhost:5432/dental_pms (from ./kotlin run).
+  db:
+    profiles: ["local-db"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: dental_pms
+      POSTGRES_USER: dental_pms
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-dental_pms}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dental_pms -d dental_pms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:

@@ -1,0 +1,22 @@
+# Secrets — never commit the Neon connection string or the JWT secret
+.env
+.env.*
+!.env.example
+
+# Build output
+build/
+out/
+.amper/
+.kotlin/
+
+# IDE
+.idea/workspace.xml
+.idea/shelf/
+*.iml.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
