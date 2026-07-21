@@ -1,0 +1,14 @@
+# Normalize to LF in the repository, and check out LF regardless of core.autocrlf.
+# This matters for the `kotlin` wrapper and the Dockerfile: with CRLF line endings a
+# shell script's shebang becomes `#!/bin/sh\r`, and Linux fails it with "not found".
+* text=auto eol=lf
+
+# Windows-only scripts genuinely need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch binaries
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary

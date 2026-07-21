@@ -16,7 +16,10 @@ WORKDIR /dental-pms
 # Wrapper and manifests first: these change rarely, so the toolchain and dependency
 # downloads below stay cached across ordinary source edits.
 COPY kotlin libs.versions.toml module.yaml ./
-RUN chmod +x kotlin
+# Strip CR in case the build context came from a CRLF checkout — a `#!/bin/sh\r`
+# shebang fails on Linux with a misleading "not found". .gitattributes pins LF, but
+# this keeps the build working from a zip export or a stray git config too.
+RUN sed -i 's/\r$//' kotlin && chmod +x kotlin
 
 COPY resources ./resources
 COPY src ./src
