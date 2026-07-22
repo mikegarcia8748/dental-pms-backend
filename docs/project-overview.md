@@ -7,14 +7,15 @@ billing and payments. Replaces the clinic's paper/manual process.
 
 ## Platforms and stack
 - **Web + tablet** (chairside), delivered as one responsive web app.
-- **Firebase**: App Hosting (deploy), SQL Connect / managed PostgreSQL on
-  Cloud SQL (backend), Authentication (login + roles). See
-  `tech-architecture.md`.
+- **Backend**: Kotlin/**Ktor** on **Google Cloud Run**, **Neon** PostgreSQL
+  (Exposed + HikariCP + Flyway), self-hosted **JWT** auth with server-side RBAC.
+  See `tech-architecture.md`.
 
 ## Roles (updated — no longer single-persona)
 The earlier "single persona" assumption is **superseded**. There are two roles:
-- **Dentist** — full access to everything.
-- **Staff / Assistant** — read-only view of the patient list and minor details.
+- **SysAdmin** — manages data and system configuration (accounts, reference/config
+  data). Detailed scope planned later; not a clinical actor.
+- **Dentist** — full access to all clinical and billing operations.
 
 See `access-control-and-roles.md`.
 
@@ -51,7 +52,7 @@ login, audit logging, encryption, automated backups, and a processing basis /
 consent. See `tech-architecture.md`.
 
 ## Doc index
-- `tech-architecture.md` — Firebase stack + privacy
+- `tech-architecture.md` — backend stack (Ktor / Cloud Run / Neon) + privacy
 - `access-control-and-roles.md` — roles and enforcement
 - `clinical-workflow.md` — the visit flow
 - `data-model.md` — entities, fields, relationships
