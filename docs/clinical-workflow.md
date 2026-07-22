@@ -18,7 +18,7 @@ step. Steps 2–7 happen within a single **Visit** record.
 ## System mapping
 | Step | System support | Notes |
 |------|----------------|-------|
-| 1. Receptionist calls patient | Staff role can view patient list (read-only) | Staff see minor details only; full flow is the dentist's. |
+| 1. Receptionist calls patient | Out of scope for v1 (no reception/queue module) | Reception / waiting-queue is a later phase; the clinical flow below is the dentist's. |
 | 2. New vs. returning patient | Patient create + search; history view | Returning patients open to their visit timeline + chart. |
 | 3. Proceed to procedure | Start a new Visit for the patient | Visit carries date + chief complaint. |
 | 4. Update dental chart | PDA odontogram editor | Per-tooth condition + side note. See chart spec. |

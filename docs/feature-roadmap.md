@@ -1,12 +1,13 @@
 # Feature Roadmap
 
-Built in slices so there is something usable early. Stack: Firebase
-(App Hosting + SQL Connect/PostgreSQL + Auth) — see `tech-architecture.md`.
+Built in slices so there is something usable early. Stack: Kotlin/Ktor on
+Cloud Run + Neon PostgreSQL (Exposed / Flyway) + self-hosted JWT auth — see
+`tech-architecture.md`.
 
 ## Phase 1 — MVP
 Digitizes workflow steps 2–7 with the now-required multi-user + billing depth.
-- **Auth + two roles** (dentist full; staff read-only patient list/minor
-  details), enforced via Firebase Auth claims + SQL Connect `@auth`
+- **Auth + two roles** (SysAdmin for data/config; Dentist full clinical/billing),
+  self-hosted JWT with server-side RBAC — *shipped*
 - **Audit trail** + per-user attribution; no hard deletes
 - Patient profiles + search, with **structured intake**: allergies, configurable
   medical history, consent capture, senior/PWD + TIN fields
@@ -37,7 +38,8 @@ Digitizes workflow steps 2–7 with the now-required multi-user + billing depth.
 - Insurance / PhilHealth handling
 
 ## Sequencing notes
-- RBAC and audit are now Phase 1 (not deferrable) because staff can sign in.
+- RBAC and audit are now Phase 1 (not deferrable) because more than one role can
+  sign in.
 - Billing depth (plans, ledger, discounts) is Phase 1 because the clinic
   confirmed installments and multi-visit cases are normal.
 - Chart format is locked, so the chart editor can be built in Phase 1.

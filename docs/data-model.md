@@ -3,15 +3,19 @@
 Expanded to cover roles, multi-visit treatment plans, a patient ledger, the
 chart's condition-vs-planned split, structured intake/consent, and auditing.
 
-> SQL Connect note: author schema fields in **camelCase** (no underscores);
-> SQL Connect maps them to snake_case Postgres columns. Snake_case below is the
-> conceptual column name. IDs are `UUID`. See `tech-architecture.md`.
+> Schema note: columns are **snake_case** in Postgres, authored directly in the
+> Flyway migration SQL and mirrored by Exposed table objects; the Kotlin domain
+> models expose camelCase properties. The snake_case names below are the actual
+> column names. IDs are `UUID`. See `tech-architecture.md`.
 
 ## Core entities
 
-### USER (app/staff account)
-`id` · `auth_uid` (Firebase) · `display_name` · `role` (dentist | staff) ·
-`active`. Role also set as a Firebase custom claim.
+### USER (login account — table `app_user`)
+`id` · `email` (unique) · `password_hash` (bcrypt) · `display_name` ·
+`role` (sysadmin | dentist) · `active` · `created_at`. The role is carried as a
+claim in the access-token JWT; this column is the source of truth. Revocable
+refresh tokens are stored separately (hash only) in `refresh_token`. See
+`access-control-and-roles.md`.
 
 ### PATIENT
 `id` · `name` · `date_of_birth` · `sex` · `contact` · `address` ·

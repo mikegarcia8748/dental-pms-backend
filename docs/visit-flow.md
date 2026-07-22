@@ -7,12 +7,12 @@ Cross-references: `clinical-workflow.md`, `data-model.md`,
 `patient-record-and-consent.md`, `access-control-and-roles.md`.
 
 ## Actors
-- **Dentist** — performs every step below (full access).
-- **Staff/assistant** — read-only; may view the patient list / minor details to
-  help locate a patient, but does not enter clinical or billing data.
+- **Dentist** — performs every step below (full access); the only actor in the
+  clinical workflow.
+- **SysAdmin** — manages accounts and configuration; not part of the visit flow.
 
 ## Preconditions
-- User is authenticated (Firebase Auth); role determines available actions.
+- User is authenticated (JWT); the **Dentist** role is required to perform the flow.
 - Every create/edit is attributed to the acting user and audit-logged.
 
 ---
@@ -112,7 +112,8 @@ The ledger shows one running balance across all three visits.
   carried to a future visit.
 - **Discount eligibility unverified** (no ID presented) → do not apply; record
   reason. ID + TIN required for the tax deduction.
-- **Staff tries a write action** → blocked server-side by `@auth`, not just UI.
+- **Unauthorized / wrong-role write attempt** → blocked server-side by the route's
+  role guard (401/403), not just in the UI.
 - **Duplicate patient on intake** → search/merge guard before creating a new
   profile.
 
@@ -131,5 +132,4 @@ flowchart TD
 
 ## Open items affecting this flow
 See `open-questions-and-decisions.md` — bill scope (visit vs. plan), whether
-installment schedules ship in v1, intake depth at launch, and staff-visible
-fields all touch this flow.
+installment schedules ship in v1, and intake depth at launch all touch this flow.
