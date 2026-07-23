@@ -47,7 +47,9 @@ image if you prefer plain `docker run --env-file .env -p 8080:8080 dental-pms`.
 The image is built in two stages: the Amper wrapper produces an executable jar,
 which is then copied onto a JRE base and run as a non-root user.
 
-Once running, `GET /health` returns `{"status":"ok"}`.
+Once running, the base URL `/` returns a small JSON service index (links to `/health`,
+`/swagger`, and `/api.json`), and `GET /health` returns `{"status":"ok"}`. Note that
+any other path — including a bare `/does-not-exist` — returns a JSON `404`, not a page.
 
 ## Configuration
 
@@ -64,6 +66,12 @@ The server binds `SERVER_HOST` (default `0.0.0.0`) on `PORT` (default `8080`), s
 it is reachable at `http://<your-lan-ip>:8080` in both modes — compose publishes
 the port on every host interface. Set `SERVER_HOST=127.0.0.1` locally, or the mapping to
 `"127.0.0.1:8080:8080"` in `compose.yaml`, to restrict it to this machine.
+
+The canonical port is `8080` everywhere. If it is already taken, don't scatter a second
+number across the stack: for a local `./kotlin run`, set `PORT` (e.g. `PORT=8081`) to move
+just that process; for the compose container, set `HOST_PORT` to move the *published* port
+while the container keeps listening on 8080. Swagger's "Try it out" follows the origin it
+was loaded from, so it works on whichever port you land on.
 
 On Windows, the first local run may need a firewall rule allowing inbound
 connections to the JVM on that port; Docker Desktop adds its own rule for

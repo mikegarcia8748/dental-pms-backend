@@ -24,8 +24,11 @@ fun Application.configureOpenApi() {
             description = "Dental clinic practice management system API"
         }
         server {
-            url = "http://localhost:8080"
-            description = "Local development server"
+            // Relative URL: Swagger UI resolves it against the origin that served the page, so
+            // "Try it out" targets whatever host/port is actually in use (8080, 8081, a LAN IP, a proxy)
+            // instead of a hardcoded one that drifts out of sync with PORT.
+            url = "/"
+            description = "This server"
         }
         security {
             // The JWT bearer scheme used by the "Authorize" button in Swagger UI.

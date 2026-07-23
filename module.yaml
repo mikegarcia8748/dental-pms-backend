@@ -9,6 +9,7 @@ dependencies:
   - $ktor.server.core
   - $ktor.server.metrics.micrometer
   - $ktor.server.netty
+  - $ktor.server.statusPages
   - $libs.bcrypt
   - $libs.exposed.core
   - $libs.exposed.jdbc
