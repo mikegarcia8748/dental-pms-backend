@@ -7,6 +7,7 @@ dependencies:
   - $ktor.server.callLogging
   - $ktor.server.contentNegotiation
   - $ktor.server.core
+  - $ktor.server.cors
   - $ktor.server.metrics.micrometer
   - $ktor.server.netty
   - $ktor.server.statusPages

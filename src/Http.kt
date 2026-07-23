@@ -6,8 +6,44 @@ import io.github.smiley4.ktoropenapi.config.AuthScheme
 import io.github.smiley4.ktoropenapi.config.AuthType
 import io.github.smiley4.ktoropenapi.config.SchemaGenerator
 import io.github.smiley4.ktorswaggerui.swaggerUI
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.server.application.*
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.routing.*
+
+/**
+ * Enables cross-origin requests from the browser frontend. Without this the server sends no
+ * `Access-Control-Allow-Origin` header, so a page served from a different origin (e.g. the dev
+ * frontend on :8080 calling the API on :8081) fails its CORS preflight and the fetch is blocked.
+ *
+ * Installed before routing so the plugin's preflight (`OPTIONS`) handling is in place for every route.
+ */
+fun Application.configureCors() {
+    install(CORS) {
+        CorsConfig.allowedHosts.forEach { host ->
+            // Allow both http and https so the same config works behind a TLS-terminating proxy.
+            allowHost(host, schemes = listOf("http", "https"))
+        }
+
+        // Methods used by the auth routes plus the preflight's own OPTIONS.
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Delete)
+
+        // Headers the browser is allowed to send. Authorization carries the JWT bearer token;
+        // ContentType is required for JSON request bodies.
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader(HttpHeaders.ContentType)
+
+        // Off: auth is bearer-token in the Authorization header, not cookies, so credentialed
+        // requests aren't used. Flip to true only if you move to cookie-based sessions — and even
+        // then keep the explicit origin list above, since the browser forbids credentials + wildcard.
+        allowCredentials = false
+    }
+}
 
 /**
  * Installs the OpenAPI plugin (code-first: the spec is generated from the documented routes) and exposes:
