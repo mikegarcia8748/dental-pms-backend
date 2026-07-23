@@ -10,6 +10,7 @@ fun Application.rootModule() {
     val authConfig by inject<AuthConfig>()
 
     configureOpenApi()
+    configureCors()
     configureMonitoring()
     configureSerialization()
     configureStatusPages()

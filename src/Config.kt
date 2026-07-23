@@ -38,3 +38,44 @@ object ServerConfig {
     val host: String get() = Env.get("SERVER_HOST", "0.0.0.0")
     val port: Int get() = Env.int("PORT", 8080)
 }
+
+/**
+ * Deployment profile. `APP_ENV=prod` (or `production`) turns on production-only guards; any other
+ * value — including the unset default — is treated as development.
+ */
+object AppConfig {
+    val environment: String get() = Env.get("APP_ENV", "dev")
+    val isProduction: Boolean
+        get() = environment.equals("prod", ignoreCase = true) || environment.equals("production", ignoreCase = true)
+}
+
+/**
+ * Browser origins allowed to call the API cross-origin. Comma-separated `host:port` entries
+ * (no scheme — Ktor's `allowHost` takes the authority only).
+ *
+ * In development, an unset value falls back to a dev frontend reachable as both `localhost` and
+ * `127.0.0.1` (the browser treats those as distinct origins). In production the fallback is a
+ * misconfiguration, so an unset `CORS_ALLOWED_HOSTS` fails fast rather than booting with a
+ * localhost allowlist no real browser will match.
+ */
+object CorsConfig {
+    private val DEV_DEFAULT_HOSTS = listOf("localhost:8080", "127.0.0.1:8080")
+
+    val allowedHosts: List<String>
+        get() {
+            // Env[...] returns null for an unset OR blank value, so both collapse to the same branch.
+            val raw = Env["CORS_ALLOWED_HOSTS"]
+            if (raw == null) {
+                require(!AppConfig.isProduction) {
+                    "CORS_ALLOWED_HOSTS must be set in production (APP_ENV=prod); " +
+                        "refusing to fall back to the localhost dev allowlist"
+                }
+                return DEV_DEFAULT_HOSTS
+            }
+            val hosts = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            require(hosts.isNotEmpty()) {
+                "CORS_ALLOWED_HOSTS was set but contained no valid host:port entries"
+            }
+            return hosts
+        }
+}
