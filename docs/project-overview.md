@@ -54,6 +54,7 @@ consent. See `tech-architecture.md`.
 ## Doc index
 - `tech-architecture.md` — backend stack (Ktor / Cloud Run / Neon) + privacy
 - `access-control-and-roles.md` — roles and enforcement
+- `api-contracts/` — HTTP API contracts for front-end integration (auth, system)
 - `clinical-workflow.md` — the visit flow
 - `data-model.md` — entities, fields, relationships
 - `dental-chart-pda-spec.md` — PDA dental chart

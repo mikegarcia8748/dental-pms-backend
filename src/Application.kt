@@ -12,6 +12,7 @@ fun Application.rootModule() {
     configureOpenApi()
     configureMonitoring()
     configureSerialization()
+    configureStatusPages()
     configureDatabase()
     configureSecurity(authConfig)
     configureRouting()
