@@ -36,6 +36,10 @@ performs the clinical workflow (see `visit-flow.md`).
 - Accounts can be **deactivated** (`active = false`): a deactivated user can
   neither log in nor refresh.
 
+> The concrete HTTP contract for these endpoints — request/response shapes, error
+> codes, and the login → refresh → logout sequence — is in
+> [`api-contracts/auth.md`](api-contracts/auth.md).
+
 ## First-run bootstrap
 When the user table is empty, the app seeds the initial **SysAdmin** and
 **Dentist** accounts from environment variables (each role is seeded only if its
