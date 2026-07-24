@@ -20,6 +20,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.verify
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -53,11 +54,16 @@ class AuthenticateUserUseCaseTest : BehaviorSpec({
     given("email + password authentication") {
 
         `when`("the email is unknown") {
-            then("it is rejected with InvalidCredentials") {
+            then("it is rejected with InvalidCredentials, still running a verify to equalize timing") {
                 coEvery { users.findByEmail("ghost@clinic.test") } returns null
+                every { passwordHasher.hash(any()) } returns "dummy-hash"
+                every { passwordHasher.verify(any(), any()) } returns false
 
                 authenticate("ghost@clinic.test", "whatever") shouldBe
                     AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
+
+                // The bcrypt verify runs even for an unknown email, so response time can't enumerate users.
+                verify(exactly = 1) { passwordHasher.verify("whatever", "dummy-hash") }
             }
         }
 

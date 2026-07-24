@@ -1,6 +1,7 @@
 package com.pms.dental.auth
 
 import com.pms.dental.configureSerialization
+import com.pms.dental.configureStatusPages
 import com.pms.dental.config.AuthConfig
 import com.pms.dental.domain.model.AppUser
 import com.pms.dental.domain.model.Role
@@ -70,6 +71,7 @@ private class Wiring {
 private fun ApplicationTestBuilder.installAuthApp(w: Wiring) {
     application {
         configureSerialization()
+        configureStatusPages()
         configureSecurity(w.config)
         routing {
             authRoutes(w.login, w.refresh, w.logout)
@@ -160,7 +162,7 @@ class AuthRoutesTest : FunSpec({
         }
     }
 
-    test("refresh - rotates the token pair and rejects reuse of the old refresh token") {
+    test("refresh - rotates the token pair, and replaying the old token revokes the whole family") {
         val w = Wiring().apply { seedDentist() }
         testApplication {
             installAuthApp(w)
@@ -172,13 +174,92 @@ class AuthRoutesTest : FunSpec({
                 setBody(RefreshRequest(original.refreshToken))
             }
             refreshed.status shouldBe HttpStatusCode.OK
-            refreshed.body<TokenResponse>().accessToken.shouldNotBeBlank()
+            val rotated = refreshed.body<TokenResponse>()
+            rotated.accessToken.shouldNotBeBlank()
 
+            // Replaying the old (now revoked) token is rejected...
             val reuseOld = client.post("/auth/refresh") {
                 contentType(ContentType.Application.Json)
                 setBody(RefreshRequest(original.refreshToken))
             }
             reuseOld.status shouldBe HttpStatusCode.Unauthorized
+
+            // ...and reuse detection has burned the family, so the freshly-issued token is dead too.
+            val useRotated = client.post("/auth/refresh") {
+                contentType(ContentType.Application.Json)
+                setBody(RefreshRequest(rotated.refreshToken))
+            }
+            useRotated.status shouldBe HttpStatusCode.Unauthorized
+        }
+    }
+
+    test("login - malformed JSON body - returns 400 not 500") {
+        testApplication {
+            installAuthApp(Wiring())
+            val client = jsonClient()
+
+            val response = client.post("/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody("{ not valid json")
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("login - body missing the password field - returns 400") {
+        testApplication {
+            installAuthApp(Wiring())
+            val client = jsonClient()
+
+            val response = client.post("/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"dentist@clinic.test"}""")
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("login - blank email and password - returns 400") {
+        testApplication {
+            installAuthApp(Wiring())
+            val client = jsonClient()
+
+            val response = client.post("/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody(LoginRequest("", ""))
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("login - password longer than 72 bytes - returns 400") {
+        testApplication {
+            installAuthApp(Wiring())
+            val client = jsonClient()
+
+            val response = client.post("/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody(LoginRequest("dentist@clinic.test", "a".repeat(73)))
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("refresh - blank refresh token - returns 400") {
+        testApplication {
+            installAuthApp(Wiring())
+            val client = jsonClient()
+
+            val response = client.post("/auth/refresh") {
+                contentType(ContentType.Application.Json)
+                setBody(RefreshRequest("  "))
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
         }
     }
 

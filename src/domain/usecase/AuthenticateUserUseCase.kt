@@ -38,9 +38,20 @@ class AuthenticateUserUseCase(
     private val clock: Clock,
     private val refreshTokenTtl: Duration,
 ) {
+    /**
+     * A throwaway hash computed with the injected hasher (so it always matches production's bcrypt
+     * cost). We verify against it when the email is unknown, so an unknown email costs the same
+     * bcrypt work as a wrong password and can't be distinguished by response time. Computed lazily
+     * to keep construction cheap and avoid running bcrypt against a mocked hasher during tests.
+     */
+    private val dummyHash: String by lazy { passwordHasher.hash(DUMMY_PASSWORD) }
+
     suspend operator fun invoke(email: String, rawPassword: String): AuthenticationResult {
         val user = users.findByEmail(email.trim().lowercase())
-            ?: return AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
+        if (user == null) {
+            passwordHasher.verify(rawPassword, dummyHash) // equalize timing; result deliberately ignored
+            return AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
+        }
 
         if (!passwordHasher.verify(rawPassword, user.passwordHash)) {
             return AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
@@ -58,5 +69,10 @@ class AuthenticateUserUseCase(
             user,
             AuthTokens(access.token, refresh.raw, access.expiresInSeconds),
         )
+    }
+
+    private companion object {
+        /** Arbitrary constant fed to the hasher to build [dummyHash]; never a real credential. */
+        const val DUMMY_PASSWORD = "timing-equalization-dummy-password"
     }
 }

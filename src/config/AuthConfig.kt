@@ -20,14 +20,22 @@ data class AuthConfig(
     val accessTtlSeconds: Long get() = accessTtlMinutes * 60
     val refreshTtl: Duration get() = Duration.ofDays(refreshTtlDays)
 
+    init {
+        // Fail fast on any construction path (fromEnv or a hand-built config) so a misconfigured
+        // deployment never boots with a weak key or a zero/negative token lifetime.
+        require(jwtSecret.length >= MIN_SECRET_LENGTH) {
+            "JWT_SECRET must be at least $MIN_SECRET_LENGTH characters long"
+        }
+        require(accessTtlMinutes > 0) { "ACCESS_TOKEN_TTL_MINUTES must be positive" }
+        require(refreshTtlDays > 0) { "REFRESH_TOKEN_TTL_DAYS must be positive" }
+    }
+
     companion object {
         private const val MIN_SECRET_LENGTH = 32
 
         fun fromEnv(): AuthConfig {
             val secret = Env["JWT_SECRET"]
-            require(secret != null && secret.length >= MIN_SECRET_LENGTH) {
-                "JWT_SECRET must be set and at least $MIN_SECRET_LENGTH characters long"
-            }
+            requireNotNull(secret) { "JWT_SECRET must be set" }
             return AuthConfig(
                 jwtSecret = secret,
                 jwtIssuer = Env.get("JWT_ISSUER", "dental-pms"),
