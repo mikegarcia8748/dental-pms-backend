@@ -40,7 +40,13 @@ class RefreshAccessTokenUseCase(
         val record = refreshTokens.findByHash(hash)
             ?: return RefreshResult.Rejected(RefreshError.InvalidToken)
 
-        if (record.revoked) return RefreshResult.Rejected(RefreshError.Revoked)
+        // Reuse detection: a token is only revoked after it has been rotated (or the user logged out).
+        // Seeing one presented again means it was replayed — likely a stolen token racing the legitimate
+        // client — so burn the whole family, forcing every session for this user to re-authenticate.
+        if (record.revoked) {
+            refreshTokens.revokeAllForUser(record.userId)
+            return RefreshResult.Rejected(RefreshError.Revoked)
+        }
         if (!record.expiresAt.isAfter(clock.now())) return RefreshResult.Rejected(RefreshError.Expired)
 
         val user = users.findById(record.userId)

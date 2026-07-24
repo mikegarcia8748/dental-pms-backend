@@ -49,7 +49,10 @@ fun Route.authRoutes(
             }
         }) {
             val body = call.receive<LoginRequest>()
-            when (val result = login(body.email, body.password)) {
+            val validationError = body.validationError()
+            if (validationError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_request", validationError))
+            } else when (val result = login(body.email, body.password)) {
                 is AuthenticationResult.Success ->
                     call.respond(HttpStatusCode.OK, result.toLoginResponse())
                 is AuthenticationResult.Rejected -> when (result.error) {
@@ -82,7 +85,10 @@ fun Route.authRoutes(
             }
         }) {
             val body = call.receive<RefreshRequest>()
-            when (val result = refresh(body.refreshToken)) {
+            val validationError = body.validationError()
+            if (validationError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_request", validationError))
+            } else when (val result = refresh(body.refreshToken)) {
                 is RefreshResult.Success ->
                     call.respond(HttpStatusCode.OK, result.tokens.toTokenResponse())
                 is RefreshResult.Rejected -> when (result.error) {
@@ -106,8 +112,13 @@ fun Route.authRoutes(
             }
         }) {
             val body = call.receive<LogoutRequest>()
-            logout(body.refreshToken)
-            call.respond(HttpStatusCode.NoContent)
+            val validationError = body.validationError()
+            if (validationError != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_request", validationError))
+            } else {
+                logout(body.refreshToken)
+                call.respond(HttpStatusCode.NoContent)
+            }
         }
 
         authenticate("auth-jwt") {

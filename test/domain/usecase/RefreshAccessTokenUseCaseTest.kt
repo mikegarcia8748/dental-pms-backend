@@ -60,9 +60,13 @@ class RefreshAccessTokenUseCaseTest : BehaviorSpec({
         }
 
         `when`("the token has been revoked") {
-            then("it is rejected with Revoked") {
+            then("it is rejected with Revoked and the whole token family is burned (reuse detection)") {
                 coEvery { refreshTokens.findByHash("hash-token") } returns record(revoked = true)
+                coEvery { refreshTokens.revokeAllForUser(userId) } just Runs
+
                 refresh("raw-token") shouldBe RefreshResult.Rejected(RefreshError.Revoked)
+
+                coVerify(exactly = 1) { refreshTokens.revokeAllForUser(userId) }
             }
         }
 

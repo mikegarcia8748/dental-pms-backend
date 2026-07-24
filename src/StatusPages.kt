@@ -4,6 +4,7 @@ import com.pms.dental.auth.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
@@ -20,6 +21,11 @@ fun Application.configureStatusPages() {
     install(StatusPages) {
         status(HttpStatusCode.NotFound) { call, status ->
             call.respond(status, ErrorResponse("not_found", "No route for ${call.request.path()}"))
+        }
+        // Malformed JSON or a missing required field surfaces as BadRequestException from call.receive;
+        // map it to 400 so clients aren't told their own bad input was a server error.
+        exception<BadRequestException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid_request", "Malformed or missing request body"))
         }
         exception<Throwable> { call, cause ->
             logger.error("Unhandled exception for ${call.request.path()}", cause)
