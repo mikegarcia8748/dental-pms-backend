@@ -4,6 +4,8 @@ import com.pms.dental.auth.authRoutes
 import com.pms.dental.domain.usecase.AuthenticateUserUseCase
 import com.pms.dental.domain.usecase.LogoutUseCase
 import com.pms.dental.domain.usecase.RefreshAccessTokenUseCase
+import com.pms.dental.patient.PatientUseCases
+import com.pms.dental.patient.patientRoutes
 import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -16,10 +18,12 @@ fun Application.configureRouting() {
     val login by inject<AuthenticateUserUseCase>()
     val refresh by inject<RefreshAccessTokenUseCase>()
     val logout by inject<LogoutUseCase>()
+    val patientUseCases by inject<PatientUseCases>()
 
     routing {
         systemRoutes()
         authRoutes(login, refresh, logout)
+        patientRoutes(patientUseCases)
     }
 }
 

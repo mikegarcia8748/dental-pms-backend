@@ -20,6 +20,7 @@ here ever disagrees with `/api.json`, the running spec wins.
 |--------|------|--------|
 | Authentication | [auth.md](auth.md) | Available |
 | System / health | [system.md](system.md) | Available |
+| Patients & intake | [patients.md](patients.md) | Available |
 
 > **Naming convention.** One file per feature/module, named `<module>.md` (lowercase,
 > kebab-case if multi-word). As new modules ship (patients, visits, dental chart,
