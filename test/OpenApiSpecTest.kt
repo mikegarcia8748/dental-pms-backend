@@ -3,6 +3,7 @@ package com.pms.dental
 import com.pms.dental.auth.authRoutes
 import com.pms.dental.auth.configureSecurity
 import com.pms.dental.config.AuthConfig
+import com.pms.dental.patient.patientRoutes
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -48,6 +49,26 @@ class OpenApiSpecTest : FunSpec({
             spec shouldContain "/auth/me"
             spec shouldContain "LoginResponse"
             spec shouldContain "bearerAuth"
+        }
+    }
+
+    test("the generated spec documents the patient endpoints and DTO schemas") {
+        testApplication {
+            application {
+                configureSerialization()
+                configureSecurity(config)
+                configureOpenApi()
+                routing {
+                    patientRoutes(mockk(relaxed = true))
+                }
+            }
+
+            val spec = client.get("/api.json").bodyAsText()
+
+            spec shouldContain "/patients"
+            spec shouldContain "/intake-questions"
+            spec shouldContain "/consent-texts"
+            spec shouldContain "PatientDetailsResponse"
         }
     }
 })

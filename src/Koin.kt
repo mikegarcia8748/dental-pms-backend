@@ -21,6 +21,33 @@ import com.pms.dental.infra.JwtAccessTokenIssuer
 import com.pms.dental.infra.SecureRandomRefreshTokenFactory
 import com.pms.dental.infra.SystemClock
 import com.pms.dental.infra.UuidGenerator
+import com.pms.dental.data.ExposedAllergyRepository
+import com.pms.dental.data.ExposedAuditLogRepository
+import com.pms.dental.data.ExposedConsentRepository
+import com.pms.dental.data.ExposedConsentTextRepository
+import com.pms.dental.data.ExposedIntakeQuestionRepository
+import com.pms.dental.data.ExposedPatientIntakeAnswerRepository
+import com.pms.dental.data.ExposedPatientRepository
+import com.pms.dental.domain.repository.AllergyRepository
+import com.pms.dental.domain.repository.AuditLogRepository
+import com.pms.dental.domain.repository.ConsentRepository
+import com.pms.dental.domain.repository.ConsentTextRepository
+import com.pms.dental.domain.repository.IntakeQuestionRepository
+import com.pms.dental.domain.repository.PatientIntakeAnswerRepository
+import com.pms.dental.domain.repository.PatientRepository
+import com.pms.dental.domain.usecase.AddAllergyUseCase
+import com.pms.dental.domain.usecase.DeactivateAllergyUseCase
+import com.pms.dental.domain.usecase.DeactivatePatientUseCase
+import com.pms.dental.domain.usecase.GetPatientDetailsUseCase
+import com.pms.dental.domain.usecase.ListConsentTextsUseCase
+import com.pms.dental.domain.usecase.ListIntakeQuestionsUseCase
+import com.pms.dental.domain.usecase.ListPatientsUseCase
+import com.pms.dental.domain.usecase.RecordConsentUseCase
+import com.pms.dental.domain.usecase.RegisterPatientUseCase
+import com.pms.dental.domain.usecase.UpdateAllergyUseCase
+import com.pms.dental.domain.usecase.UpdatePatientUseCase
+import com.pms.dental.domain.usecase.UpsertIntakeAnswersUseCase
+import com.pms.dental.patient.PatientUseCases
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import org.koin.dsl.module
@@ -59,6 +86,33 @@ val appModule = module {
     }
     single { LogoutUseCase(get(), get()) }
     single { BootstrapUsersUseCase(get(), get(), get()) }
+
+    // Patient registration & intake slice
+    single<PatientRepository> { ExposedPatientRepository() }
+    single<AllergyRepository> { ExposedAllergyRepository() }
+    single<IntakeQuestionRepository> { ExposedIntakeQuestionRepository() }
+    single<PatientIntakeAnswerRepository> { ExposedPatientIntakeAnswerRepository() }
+    single<ConsentRepository> { ExposedConsentRepository() }
+    single<ConsentTextRepository> { ExposedConsentTextRepository() }
+    single<AuditLogRepository> { ExposedAuditLogRepository() }
+
+    single { RegisterPatientUseCase(get(), get(), get(), get(), get()) }
+    single { ListPatientsUseCase(get()) }
+    single { GetPatientDetailsUseCase(get(), get(), get(), get()) }
+    single { UpdatePatientUseCase(get(), get(), get(), get()) }
+    single { DeactivatePatientUseCase(get(), get(), get(), get()) }
+    single { AddAllergyUseCase(get(), get(), get(), get(), get()) }
+    single { UpdateAllergyUseCase(get(), get(), get(), get()) }
+    single { DeactivateAllergyUseCase(get(), get(), get(), get()) }
+    single { UpsertIntakeAnswersUseCase(get(), get(), get(), get(), get(), get()) }
+    single { RecordConsentUseCase(get(), get(), get(), get(), get(), get()) }
+    single { ListIntakeQuestionsUseCase(get()) }
+    single { ListConsentTextsUseCase(get()) }
+    single {
+        PatientUseCases(
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+        )
+    }
 }
 
 fun Application.configureKoin() {
