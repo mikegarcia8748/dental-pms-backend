@@ -1,0 +1,88 @@
+# Cloud Run service — DEV environment (containerized JVM, front-end dev/testing).
+#
+# Declarative Knative Service applied with:  gcloud run services replace service.dev.yaml --region <REGION>
+# deploy/deploy.ps1 substitutes the __IMAGE__ placeholder with the freshly built+pushed image.
+#
+# Fill in the REPLACE_* placeholders before the first deploy:
+#   - REPLACE_NEON_DEV_DIRECT_HOST : the DIRECT (non-pooled) endpoint host of your Neon *dev* branch
+#                                    (no "-pooler" in the hostname — Flyway's migration lock needs a real session).
+#   - REPLACE_FE_DEV_ORIGIN        : your front-end dev origin as host[:port] (no scheme), e.g. dev.app.example.com
+#
+# Secrets (DATABASE_PASSWORD, JWT_SECRET) are pulled from Secret Manager — create them once, see docs/environments.md.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: dental-pms-dev
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"   # scale to zero when idle (dev cost saver)
+        autoscaling.knative.dev/maxScale: "4"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 40
+      timeoutSeconds: 300
+      containers:
+        - image: __IMAGE__
+          ports:
+            - name: http1
+              containerPort: 8080   # Cloud Run injects PORT=8080; the app reads PORT.
+          env:
+            - name: APP_ENV
+              value: "dev"
+            # DIRECT (non-pooled) Neon *dev* branch endpoint; sslmode=require.
+            - name: DATABASE_URL
+              value: "jdbc:postgresql://REPLACE_NEON_DEV_DIRECT_HOST/dental_pms?sslmode=require"
+            - name: DATABASE_USER
+              value: "neondb_owner"
+            - name: DATABASE_POOL_SIZE
+              value: "5"
+            - name: JWT_ISSUER
+              value: "dental-pms"
+            - name: JWT_AUDIENCE
+              value: "dental-pms-web"
+            - name: ACCESS_TOKEN_TTL_MINUTES
+              value: "15"
+            - name: REFRESH_TOKEN_TTL_DAYS
+              value: "14"
+            # Front-end dev origin(s), comma-separated host[:port] (no scheme). Required in prod; set here too.
+            - name: CORS_ALLOWED_HOSTS
+              value: "REPLACE_FE_DEV_ORIGIN"
+            # ---- Secrets from Secret Manager (create once; see docs/environments.md) ----
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dental-pms-dev-db-password
+                  key: latest
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dental-pms-dev-jwt-secret
+                  key: latest
+            # ---- First-run bootstrap (OPTIONAL) --------------------------------------
+            # Seeds the initial accounts only while app_user is empty (idempotent). Wire these
+            # as secrets for the FIRST deploy, then remove them and redeploy. See docs/environments.md.
+            # - name: BOOTSTRAP_SYSADMIN_EMAIL
+            #   valueFrom: { secretKeyRef: { name: dental-pms-dev-bootstrap-sysadmin-email, key: latest } }
+            # - name: BOOTSTRAP_SYSADMIN_PASSWORD
+            #   valueFrom: { secretKeyRef: { name: dental-pms-dev-bootstrap-sysadmin-password, key: latest } }
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 30   # up to ~90s: covers JVM warmup + Neon cold-wake from autosuspend
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 3

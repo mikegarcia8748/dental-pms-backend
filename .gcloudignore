@@ -1,0 +1,24 @@
+# Files ignored by gcloud uploads (e.g. `gcloud run deploy --source`, `gcloud builds submit`).
+# We normally build+push the image locally via deploy/deploy.ps1, but this keeps any
+# source-based deploy small and secret-free. Mirrors .dockerignore.
+
+# gcloud honors .gitignore by default; this file replaces that behavior, so re-list build junk.
+.git
+.gitignore
+.idea
+*.iml
+build/
+out/
+.amper/
+.kotlin/
+.claude/
+docs/
+*.log
+
+# Secrets: configuration reaches Cloud Run through env vars + Secret Manager, never the image.
+.env
+.env.*
+!.env.example
+
+# The wrapper's Windows twin is not used inside the Linux build stage.
+kotlin.bat
