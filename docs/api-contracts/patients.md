@@ -31,6 +31,7 @@ enums as their name strings, and the `{ "error", "message" }` envelope on non-2x
 | `GET /patients/{id}` | Full record | `200` `PatientDetails` |
 | `PUT /patients/{id}` | Replace the profile | `200` `Patient` |
 | `POST /patients/{id}/deactivate` | Soft-delete | `204` |
+| `POST /patients/{id}/reactivate` | Restore a soft-deleted patient | `204` |
 | `POST /patients/{id}/allergies` | Add an allergy | `201` `Allergy` |
 | `PUT /patients/{id}/allergies/{allergyId}` | Edit an allergy | `200` `Allergy` |
 | `POST /patients/{id}/allergies/{allergyId}/deactivate` | Soft-delete an allergy | `204` |
@@ -71,20 +72,31 @@ Request:
 ```
 
 An answer sets exactly the one value field matching its question's `answerType`
-(`answerBoolean` | `answerText` | `answerDate`). Response `201` is the `PatientDetails` shape
+(`answerBoolean` | `answerText` | `answerDate`); for a `CHOICE` question the `answerText` must be one
+of the question's `choices`. Response `201` is the `PatientDetails` shape
 (`{ "patient": {...}, "allergies": [...], "answers": [...], "consents": [...] }`).
+
+A **non-legacy** registration **requires** `dateOfBirth` and `mobileNumber` (legacy backfill relaxes
+both — see below). For a **minor** (DOB < 18), each consent must be acknowledged with
+`acknowledgedByRole = GUARDIAN`, and `guardianName`/`guardianContact` are required. Consents must
+reference a **currently-active** consent-text version. Duplicate allergies/consents are permitted;
+duplicate `answers` for the same `questionId` are rejected (`invalid_request`).
 
 **Business rejections → `400`** (branch on the stable `error` code):
 
 | `error` | When |
 |---|---|
 | `minor_requires_guardian` | `dateOfBirth` makes the patient < 18 but `guardianName`/`guardianContact` are missing |
+| `minor_consent_requires_guardian` | a minor's consent was acknowledged by someone other than `GUARDIAN` |
 | `missing_data_privacy_consent` | a non-legacy registration with no `DATA_PRIVACY` consent |
 | `unknown_question` | an answer references an unknown/inactive question |
 | `answer_type_mismatch` | an answer value doesn't match its question's type |
-| `unknown_consent_text` | a consent references a `(type, version)` with no consent text |
+| `answer_not_in_choices` | a `CHOICE` answer's value is not one of the question's `choices` |
+| `unknown_consent_text` | a consent references a `(type, version)` with no **active** consent text |
+| `future_date_of_birth` | `dateOfBirth` is in the future |
+| `future_acknowledgment_date` | a consent's `acknowledgedAt` is in the future |
 | `future_registration_date` | a legacy `registeredAt` is in the future |
-| `invalid_request` | malformed body / bad shape (blank name, unparseable date/enum, …) |
+| `invalid_request` | malformed body / bad shape (blank/missing required field, unparseable date/enum, duplicate `questionId`, …) |
 
 ### Legacy (paper-only) patients
 
@@ -101,10 +113,17 @@ Returns `{ "patients": PatientSummary[], "total": <long>, "page": <int>, "limit"
 
 ## Notes
 
-- Every create/edit/deactivate is attributed to the acting Dentist and written to the audit log.
-- Nothing is hard-deleted — `deactivate` flips `active` to false (idempotent).
+- Every create/edit/(de/re)activate is attributed to the acting Dentist and written to the audit log.
+- Nothing is hard-deleted — `deactivate` flips `active` to false (idempotent); `reactivate` is its
+  inverse (also idempotent). A **deactivated patient rejects edits** — `PUT /patients/{id}`,
+  `POST /allergies`, `PUT /intake-answers`, and `POST /consents` return `409` `patient_inactive`;
+  reactivate first to resume editing.
+- `PUT /patients/{id}` replaces the profile but treats `registeredAt` as immutable **except** on a
+  legacy record, where a past `registeredAt` may be corrected (a future one → `future_registration_date`).
+- The same minor/consent/date rules as registration apply to the per-resource edit endpoints
+  (`POST /consents` enforces active consent-text, no future `acknowledgedAt`, and `GUARDIAN` for minors).
 - The question set and consent texts are **seeded** (from the PDA form) and read-only via the API in
   this slice; a SysAdmin editor comes later. The tables are versioned so historical answers/consents
-  stay tied to the exact version presented.
+  stay tied to the exact version presented, and **new** acknowledgments must reference an active version.
 - The machine-readable schemas for every DTO here are in the live spec at `GET /api.json`
   (Swagger UI at `GET /swagger`); if this doc disagrees with the spec, the spec wins.

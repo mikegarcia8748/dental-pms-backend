@@ -18,12 +18,13 @@ sealed interface UpdatePatientResult {
     data class Rejected(val error: UpdatePatientError) : UpdatePatientResult
 }
 
-enum class UpdatePatientError { NotFound, MinorRequiresGuardian }
+enum class UpdatePatientError { NotFound, PatientInactive, MinorRequiresGuardian, FutureDateOfBirth, FutureRegistrationDate }
 
 /**
  * Business rule: edit an existing patient's demographics / PH status / legacy fields, recording
- * who changed it. The minor-needs-guardian rule still holds. Registration date, creation
- * attribution, and active state are preserved (deactivation is a separate action).
+ * who changed it. The minor-needs-guardian and no-future-date rules still hold. A deactivated
+ * patient can't be edited (reactivate first). Creation attribution and active state are preserved;
+ * the backdated [Patient.registeredAt] can be corrected only on a legacy record.
  */
 class UpdatePatientUseCase(
     private val patients: PatientRepository,
@@ -38,13 +39,27 @@ class UpdatePatientUseCase(
         actingUserId: UUID,
     ): UpdatePatientResult {
         val existing = patients.findById(patientId) ?: return UpdatePatientResult.Rejected(UpdatePatientError.NotFound)
+        if (!existing.active) return UpdatePatientResult.Rejected(UpdatePatientError.PatientInactive)
         val now = clock.now()
+        val today = LocalDate.ofInstant(now, zone)
 
-        demographics.dateOfBirth?.let { dob ->
-            val age = Period.between(dob, LocalDate.ofInstant(now, zone)).years
-            if (age < 18 && (demographics.guardianName.isNullOrBlank() || demographics.guardianContact.isNullOrBlank())) {
-                return UpdatePatientResult.Rejected(UpdatePatientError.MinorRequiresGuardian)
+        val dob = demographics.dateOfBirth
+        if (dob != null && dob.isAfter(today)) {
+            return UpdatePatientResult.Rejected(UpdatePatientError.FutureDateOfBirth)
+        }
+        val isMinor = dob != null && Period.between(dob, today).years < 18
+        if (isMinor && (demographics.guardianName.isNullOrBlank() || demographics.guardianContact.isNullOrBlank())) {
+            return UpdatePatientResult.Rejected(UpdatePatientError.MinorRequiresGuardian)
+        }
+
+        // Only a legacy record may correct its backdated join date; anyone else keeps the original.
+        val registeredAt = if (demographics.isLegacy && demographics.registeredAt != null) {
+            if (demographics.registeredAt.isAfter(now)) {
+                return UpdatePatientResult.Rejected(UpdatePatientError.FutureRegistrationDate)
             }
+            demographics.registeredAt
+        } else {
+            existing.registeredAt
         }
 
         val updated = existing.copy(
@@ -80,6 +95,7 @@ class UpdatePatientUseCase(
             referralSource = demographics.referralSource?.trim(),
             isLegacy = demographics.isLegacy,
             legacySummary = demographics.legacySummary?.trim(),
+            registeredAt = registeredAt,
             updatedBy = actingUserId,
             updatedAt = now,
         )

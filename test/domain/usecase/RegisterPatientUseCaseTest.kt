@@ -36,6 +36,8 @@ private class Fixture {
     val useCase = RegisterPatientUseCase(patients, questions, consentTexts, Clock { FIXED_NOW }, SequentialIds())
 
     fun dataPrivacyConsent() = NewConsent(ConsentType.DATA_PRIVACY, "RA10173-v1", AcknowledgedByRole.PATIENT, null, null)
+    fun dataPrivacyConsentByGuardian() =
+        NewConsent(ConsentType.DATA_PRIVACY, "RA10173-v1", AcknowledgedByRole.GUARDIAN, "Maria Dela Cruz", null)
 }
 
 class RegisterPatientUseCaseTest : FunSpec({
@@ -66,10 +68,70 @@ class RegisterPatientUseCaseTest : FunSpec({
             ),
             allergies = emptyList(),
             answers = emptyList(),
-            consents = listOf(f.dataPrivacyConsent()),
+            consents = listOf(f.dataPrivacyConsentByGuardian()),
         )
 
         f.useCase(command, f.actingUser).shouldBeInstanceOf<RegisterPatientResult.Success>()
+    }
+
+    test("patient registration - minor's consent acknowledged by the patient - rejected with MinorConsentRequiresGuardian") {
+        val f = Fixture()
+        f.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1"))
+        val command = PatientRegistration(
+            demographics = demographics(
+                dateOfBirth = LocalDate.of(2015, 1, 1),
+                guardianName = "Maria Dela Cruz",
+                guardianContact = "09170000001",
+            ),
+            allergies = emptyList(),
+            answers = emptyList(),
+            consents = listOf(f.dataPrivacyConsent()), // acknowledgedByRole = PATIENT
+        )
+
+        f.useCase(command, f.actingUser)
+            .shouldBeInstanceOf<RegisterPatientResult.Rejected>().error shouldBe RegisterPatientError.MinorConsentRequiresGuardian
+    }
+
+    test("patient registration - date of birth in the future - rejected with FutureDateOfBirth") {
+        val f = Fixture()
+        val command = PatientRegistration(
+            demographics = demographics(isLegacy = true, dateOfBirth = LocalDate.of(2999, 1, 1)),
+            allergies = emptyList(),
+            answers = emptyList(),
+            consents = emptyList(),
+        )
+
+        f.useCase(command, f.actingUser)
+            .shouldBeInstanceOf<RegisterPatientResult.Rejected>().error shouldBe RegisterPatientError.FutureDateOfBirth
+    }
+
+    test("patient registration - choice answer outside the allowed set - rejected with AnswerNotInChoices") {
+        val f = Fixture()
+        val choiceQ = question("blood_type", IntakeAnswerType.CHOICE).copy(choices = """["A","B","O","AB"]""")
+        f.questions.seed(choiceQ)
+        val command = PatientRegistration(
+            demographics = demographics(isLegacy = true),
+            allergies = emptyList(),
+            answers = listOf(NewAnswer(choiceQ.id, answerBoolean = null, answerText = "Z", answerDate = null)),
+            consents = emptyList(),
+        )
+
+        f.useCase(command, f.actingUser)
+            .shouldBeInstanceOf<RegisterPatientResult.Rejected>().error shouldBe RegisterPatientError.AnswerNotInChoices
+    }
+
+    test("patient registration - consent references an inactive text version - rejected with UnknownConsentText") {
+        val f = Fixture()
+        f.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1", active = false))
+        val command = PatientRegistration(
+            demographics = demographics(),
+            allergies = emptyList(),
+            answers = emptyList(),
+            consents = listOf(f.dataPrivacyConsent()),
+        )
+
+        f.useCase(command, f.actingUser)
+            .shouldBeInstanceOf<RegisterPatientResult.Rejected>().error shouldBe RegisterPatientError.UnknownConsentText
     }
 
     test("patient registration - non-legacy without data-privacy consent - rejected with MissingDataPrivacyConsent") {

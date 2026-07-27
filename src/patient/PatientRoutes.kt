@@ -26,6 +26,7 @@ import com.pms.dental.domain.usecase.DeactivateAllergyResult
 import com.pms.dental.domain.usecase.DeactivatePatientResult
 import com.pms.dental.domain.usecase.PatientDetailsResult
 import com.pms.dental.domain.usecase.PatientPage
+import com.pms.dental.domain.usecase.ReactivatePatientResult
 import com.pms.dental.domain.usecase.RecordConsentError
 import com.pms.dental.domain.usecase.RecordConsentResult
 import com.pms.dental.domain.usecase.RegisterPatientError
@@ -85,13 +86,27 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                 securitySchemeNames("bearerAuth")
                 response {
                     code(HttpStatusCode.OK) { description = "A page of matching patients."; body<PatientPageResponse>() }
+                    code(HttpStatusCode.BadRequest) { description = "Invalid query parameter."; body<ErrorResponse>() }
                 }
             }) {
-                val q = call.request.queryParameters["q"].orEmpty()
-                val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
-                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
-                val includeInactive = call.request.queryParameters["includeInactive"]?.toBooleanStrictOrNull() ?: false
-                call.respond(HttpStatusCode.OK, uc.list(q, page, limit, includeInactive).toResponse())
+                val params = call.request.queryParameters
+                val pageStr = params["page"]; val limitStr = params["limit"]; val inactiveStr = params["includeInactive"]
+                val page = pageStr?.toIntOrNull()
+                val limit = limitStr?.toIntOrNull()
+                val includeInactive = inactiveStr?.toBooleanStrictOrNull()
+                if ((pageStr != null && page == null) || (limitStr != null && limit == null) ||
+                    (inactiveStr != null && includeInactive == null)
+                ) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse("invalid_request", "page and limit must be integers; includeInactive must be true or false"),
+                    )
+                } else {
+                    call.respond(
+                        HttpStatusCode.OK,
+                        uc.list(params["q"].orEmpty(), page ?: 1, limit ?: 20, includeInactive ?: false).toResponse(),
+                    )
+                }
             }
 
             route("/{id}") {
@@ -122,6 +137,7 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                         code(HttpStatusCode.OK) { description = "Updated patient."; body<PatientResponse>() }
                         code(HttpStatusCode.BadRequest) { description = "Invalid input or rejected rule."; body<ErrorResponse>() }
                         code(HttpStatusCode.NotFound) { description = "No such patient."; body<ErrorResponse>() }
+                        code(HttpStatusCode.Conflict) { description = "Patient is deactivated."; body<ErrorResponse>() }
                     }
                 }) {
                     val patientId = call.parameters["id"]?.parseUuidOrNull()
@@ -136,8 +152,13 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                             is UpdatePatientResult.Success -> call.respond(HttpStatusCode.OK, result.patient.toResponse())
                             is UpdatePatientResult.Rejected -> when (result.error) {
                                 UpdatePatientError.NotFound -> call.respond(HttpStatusCode.NotFound, notFound())
+                                UpdatePatientError.PatientInactive -> call.respond(HttpStatusCode.Conflict, inactive())
                                 UpdatePatientError.MinorRequiresGuardian ->
                                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("minor_requires_guardian", "A patient under 18 requires a guardian name and contact"))
+                                UpdatePatientError.FutureDateOfBirth ->
+                                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("future_date_of_birth", "Date of birth cannot be in the future"))
+                                UpdatePatientError.FutureRegistrationDate ->
+                                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("future_registration_date", "Registration date cannot be in the future"))
                             }
                         }
                     }
@@ -160,6 +181,23 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                     }
                 }
 
+                post("/reactivate", {
+                    summary = "Reactivate a soft-deleted patient"
+                    tags("Patients")
+                    securitySchemeNames("bearerAuth")
+                    response {
+                        code(HttpStatusCode.NoContent) { description = "Patient is active." }
+                        code(HttpStatusCode.NotFound) { description = "No such patient."; body<ErrorResponse>() }
+                    }
+                }) {
+                    val patientId = call.parameters["id"]?.parseUuidOrNull()
+                        ?: return@post call.respond(HttpStatusCode.NotFound, notFound())
+                    when (uc.reactivate(patientId, call.authenticatedUser!!.id)) {
+                        ReactivatePatientResult.Success -> call.respond(HttpStatusCode.NoContent)
+                        ReactivatePatientResult.NotFound -> call.respond(HttpStatusCode.NotFound, notFound())
+                    }
+                }
+
                 route("/allergies") {
                     post({
                         summary = "Add an allergy"
@@ -170,6 +208,7 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                             code(HttpStatusCode.Created) { description = "Added."; body<AllergyResponse>() }
                             code(HttpStatusCode.BadRequest) { description = "Invalid input."; body<ErrorResponse>() }
                             code(HttpStatusCode.NotFound) { description = "No such patient."; body<ErrorResponse>() }
+                            code(HttpStatusCode.Conflict) { description = "Patient is deactivated."; body<ErrorResponse>() }
                         }
                     }) {
                         val patientId = call.parameters["id"]?.parseUuidOrNull()
@@ -181,6 +220,7 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                         } else when (val result = uc.addAllergy(patientId, body.toNewAllergy(), call.authenticatedUser!!.id)) {
                             is AddAllergyResult.Success -> call.respond(HttpStatusCode.Created, result.allergy.toResponse())
                             AddAllergyResult.PatientNotFound -> call.respond(HttpStatusCode.NotFound, notFound())
+                            AddAllergyResult.PatientInactive -> call.respond(HttpStatusCode.Conflict, inactive())
                         }
                     }
 
@@ -242,6 +282,7 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                         code(HttpStatusCode.OK) { description = "The stored answers."; body<List<IntakeAnswerResponse>>() }
                         code(HttpStatusCode.BadRequest) { description = "Invalid input or rejected rule."; body<ErrorResponse>() }
                         code(HttpStatusCode.NotFound) { description = "No such patient."; body<ErrorResponse>() }
+                        code(HttpStatusCode.Conflict) { description = "Patient is deactivated."; body<ErrorResponse>() }
                     }
                 }) {
                     val patientId = call.parameters["id"]?.parseUuidOrNull()
@@ -254,10 +295,13 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                         is UpsertAnswersResult.Success -> call.respond(HttpStatusCode.OK, result.answers.map { it.toResponse() })
                         is UpsertAnswersResult.Rejected -> when (result.error) {
                             UpsertAnswersError.PatientNotFound -> call.respond(HttpStatusCode.NotFound, notFound())
+                            UpsertAnswersError.PatientInactive -> call.respond(HttpStatusCode.Conflict, inactive())
                             UpsertAnswersError.UnknownQuestion ->
                                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("unknown_question", "An answer references an unknown or inactive question"))
                             UpsertAnswersError.AnswerTypeMismatch ->
                                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("answer_type_mismatch", "An answer value does not match its question's type"))
+                            UpsertAnswersError.AnswerNotInChoices ->
+                                call.respond(HttpStatusCode.BadRequest, ErrorResponse("answer_not_in_choices", "A choice answer is not one of the question's allowed choices"))
                         }
                     }
                 }
@@ -271,6 +315,7 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                         code(HttpStatusCode.Created) { description = "Recorded."; body<ConsentResponse>() }
                         code(HttpStatusCode.BadRequest) { description = "Invalid input or unknown consent text."; body<ErrorResponse>() }
                         code(HttpStatusCode.NotFound) { description = "No such patient."; body<ErrorResponse>() }
+                        code(HttpStatusCode.Conflict) { description = "Patient is deactivated."; body<ErrorResponse>() }
                     }
                 }) {
                     val patientId = call.parameters["id"]?.parseUuidOrNull()
@@ -283,8 +328,13 @@ fun Route.patientRoutes(uc: PatientUseCases) {
                         is RecordConsentResult.Success -> call.respond(HttpStatusCode.Created, result.consent.toResponse())
                         is RecordConsentResult.Rejected -> when (result.error) {
                             RecordConsentError.PatientNotFound -> call.respond(HttpStatusCode.NotFound, notFound())
+                            RecordConsentError.PatientInactive -> call.respond(HttpStatusCode.Conflict, inactive())
                             RecordConsentError.UnknownConsentText ->
-                                call.respond(HttpStatusCode.BadRequest, ErrorResponse("unknown_consent_text", "A consent references an unknown consent-text version"))
+                                call.respond(HttpStatusCode.BadRequest, ErrorResponse("unknown_consent_text", "A consent references an unknown or inactive consent-text version"))
+                            RecordConsentError.FutureAcknowledgmentDate ->
+                                call.respond(HttpStatusCode.BadRequest, ErrorResponse("future_acknowledgment_date", "Consent cannot be acknowledged in the future"))
+                            RecordConsentError.MinorConsentRequiresGuardian ->
+                                call.respond(HttpStatusCode.BadRequest, ErrorResponse("minor_consent_requires_guardian", "A minor's consent must be acknowledged by a guardian"))
                         }
                     }
                 }
@@ -340,6 +390,7 @@ fun Route.patientRoutes(uc: PatientUseCases) {
 }
 
 private fun notFound() = ErrorResponse("not_found", "No such patient")
+private fun inactive() = ErrorResponse("patient_inactive", "The patient is deactivated; reactivate before editing")
 
 private fun RegisterPatientError.toErrorResponse(): ErrorResponse = when (this) {
     RegisterPatientError.MinorRequiresGuardian ->
@@ -350,13 +401,21 @@ private fun RegisterPatientError.toErrorResponse(): ErrorResponse = when (this) 
         ErrorResponse("unknown_question", "An answer references an unknown or inactive question")
     RegisterPatientError.AnswerTypeMismatch ->
         ErrorResponse("answer_type_mismatch", "An answer value does not match its question's type")
+    RegisterPatientError.AnswerNotInChoices ->
+        ErrorResponse("answer_not_in_choices", "A choice answer is not one of the question's allowed choices")
     RegisterPatientError.UnknownConsentText ->
-        ErrorResponse("unknown_consent_text", "A consent references an unknown consent-text version")
+        ErrorResponse("unknown_consent_text", "A consent references an unknown or inactive consent-text version")
+    RegisterPatientError.MinorConsentRequiresGuardian ->
+        ErrorResponse("minor_consent_requires_guardian", "A minor's consent must be acknowledged by a guardian")
+    RegisterPatientError.FutureDateOfBirth ->
+        ErrorResponse("future_date_of_birth", "Date of birth cannot be in the future")
     RegisterPatientError.FutureRegistrationDate ->
         ErrorResponse("future_registration_date", "Registration date cannot be in the future")
 }
 
 // ── DTO → domain ────────────────────────────────────────────────────────────────────────────
+// INVARIANT: every route calls `validationError()` and returns 400 *before* mapping, so the `!!`
+// on `parseEnumOrNull`/`parseUuidOrNull` below can never fail. Any new route must validate first.
 private fun RegisterPatientRequest.toCommand() = PatientRegistration(
     demographics = profile.toDemographics(),
     allergies = allergies.map { it.toNewAllergy() },

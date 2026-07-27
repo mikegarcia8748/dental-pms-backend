@@ -16,6 +16,7 @@ import com.pms.dental.support.patient
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import java.time.LocalDate
 import java.util.UUID
 
 private class ConsentFixture {
@@ -68,5 +69,70 @@ class RecordConsentUseCaseTest : FunSpec({
         success.consent.acknowledgedAt shouldBe FIXED_NOW // defaulted to now when not supplied
         f.consents.listByPatient(p.id).single().id shouldBe success.consent.id
         f.audit.entries.single().action shouldBe AuditAction.CREATE
+    }
+
+    test("consent - deactivated patient - rejected with PatientInactive") {
+        val f = ConsentFixture()
+        f.patients.seed(patient(active = false))
+        val p = f.patients.patients.values.single()
+        f.consentTexts.seed(consentText(ConsentType.TREATMENT, "PDA-2010"))
+
+        f.useCase(
+            p.id,
+            NewConsent(ConsentType.TREATMENT, "PDA-2010", AcknowledgedByRole.PATIENT, null, null),
+            UUID.randomUUID(),
+        ).shouldBeInstanceOf<RecordConsentResult.Rejected>().error shouldBe RecordConsentError.PatientInactive
+    }
+
+    test("consent - inactive text version - rejected with UnknownConsentText") {
+        val f = ConsentFixture()
+        val p = patient()
+        f.patients.seed(p)
+        f.consentTexts.seed(consentText(ConsentType.TREATMENT, "PDA-2010", active = false))
+
+        f.useCase(
+            p.id,
+            NewConsent(ConsentType.TREATMENT, "PDA-2010", AcknowledgedByRole.PATIENT, null, null),
+            UUID.randomUUID(),
+        ).shouldBeInstanceOf<RecordConsentResult.Rejected>().error shouldBe RecordConsentError.UnknownConsentText
+    }
+
+    test("consent - acknowledged in the future - rejected with FutureAcknowledgmentDate") {
+        val f = ConsentFixture()
+        val p = patient()
+        f.patients.seed(p)
+        f.consentTexts.seed(consentText(ConsentType.TREATMENT, "PDA-2010"))
+
+        f.useCase(
+            p.id,
+            NewConsent(ConsentType.TREATMENT, "PDA-2010", AcknowledgedByRole.PATIENT, null, FIXED_NOW.plusSeconds(86_400)),
+            UUID.randomUUID(),
+        ).shouldBeInstanceOf<RecordConsentResult.Rejected>().error shouldBe RecordConsentError.FutureAcknowledgmentDate
+    }
+
+    test("consent - minor acknowledged by the patient - rejected with MinorConsentRequiresGuardian") {
+        val f = ConsentFixture()
+        f.patients.seed(patient().copy(dateOfBirth = LocalDate.of(2015, 1, 1)))
+        val p = f.patients.patients.values.single()
+        f.consentTexts.seed(consentText(ConsentType.TREATMENT, "PDA-2010"))
+
+        f.useCase(
+            p.id,
+            NewConsent(ConsentType.TREATMENT, "PDA-2010", AcknowledgedByRole.PATIENT, null, null),
+            UUID.randomUUID(),
+        ).shouldBeInstanceOf<RecordConsentResult.Rejected>().error shouldBe RecordConsentError.MinorConsentRequiresGuardian
+    }
+
+    test("consent - minor acknowledged by a guardian - succeeds") {
+        val f = ConsentFixture()
+        f.patients.seed(patient().copy(dateOfBirth = LocalDate.of(2015, 1, 1)))
+        val p = f.patients.patients.values.single()
+        f.consentTexts.seed(consentText(ConsentType.TREATMENT, "PDA-2010"))
+
+        f.useCase(
+            p.id,
+            NewConsent(ConsentType.TREATMENT, "PDA-2010", AcknowledgedByRole.GUARDIAN, "Maria Dela Cruz", null),
+            UUID.randomUUID(),
+        ).shouldBeInstanceOf<RecordConsentResult.Success>()
     }
 })

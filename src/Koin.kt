@@ -42,6 +42,7 @@ import com.pms.dental.domain.usecase.GetPatientDetailsUseCase
 import com.pms.dental.domain.usecase.ListConsentTextsUseCase
 import com.pms.dental.domain.usecase.ListIntakeQuestionsUseCase
 import com.pms.dental.domain.usecase.ListPatientsUseCase
+import com.pms.dental.domain.usecase.ReactivatePatientUseCase
 import com.pms.dental.domain.usecase.RecordConsentUseCase
 import com.pms.dental.domain.usecase.RegisterPatientUseCase
 import com.pms.dental.domain.usecase.UpdateAllergyUseCase
@@ -101,6 +102,7 @@ val appModule = module {
     single { GetPatientDetailsUseCase(get(), get(), get(), get()) }
     single { UpdatePatientUseCase(get(), get(), get(), get()) }
     single { DeactivatePatientUseCase(get(), get(), get(), get()) }
+    single { ReactivatePatientUseCase(get(), get(), get(), get()) }
     single { AddAllergyUseCase(get(), get(), get(), get(), get()) }
     single { UpdateAllergyUseCase(get(), get(), get(), get()) }
     single { DeactivateAllergyUseCase(get(), get(), get(), get()) }
@@ -110,7 +112,7 @@ val appModule = module {
     single { ListConsentTextsUseCase(get()) }
     single {
         PatientUseCases(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
         )
     }
 }

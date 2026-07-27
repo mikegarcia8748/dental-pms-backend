@@ -86,4 +86,27 @@ class UpsertIntakeAnswersUseCaseTest : FunSpec({
         stored shouldHaveSize 1
         stored.single().answerBoolean shouldBe false
     }
+
+    test("intake answers - deactivated patient - rejected with PatientInactive") {
+        val f = AnswersFixture()
+        f.patients.seed(patient(active = false))
+        val p = f.patients.patients.values.single()
+
+        f.useCase(p.id, emptyList(), UUID.randomUUID())
+            .shouldBeInstanceOf<UpsertAnswersResult.Rejected>().error shouldBe UpsertAnswersError.PatientInactive
+    }
+
+    test("intake answers - choice value outside the allowed set - rejected with AnswerNotInChoices") {
+        val f = AnswersFixture()
+        val p = patient()
+        f.patients.seed(p)
+        val choiceQ = question("blood_type", IntakeAnswerType.CHOICE).copy(choices = """["A","B","O","AB"]""")
+        f.questions.seed(choiceQ)
+
+        f.useCase(
+            p.id,
+            listOf(NewAnswer(choiceQ.id, answerBoolean = null, answerText = "Z", answerDate = null)),
+            UUID.randomUUID(),
+        ).shouldBeInstanceOf<UpsertAnswersResult.Rejected>().error shouldBe UpsertAnswersError.AnswerNotInChoices
+    }
 })

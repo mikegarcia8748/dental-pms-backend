@@ -17,6 +17,7 @@ import com.pms.dental.domain.usecase.GetPatientDetailsUseCase
 import com.pms.dental.domain.usecase.ListConsentTextsUseCase
 import com.pms.dental.domain.usecase.ListIntakeQuestionsUseCase
 import com.pms.dental.domain.usecase.ListPatientsUseCase
+import com.pms.dental.domain.usecase.ReactivatePatientUseCase
 import com.pms.dental.domain.usecase.RecordConsentUseCase
 import com.pms.dental.domain.usecase.RegisterPatientUseCase
 import com.pms.dental.domain.usecase.UpdateAllergyUseCase
@@ -78,6 +79,7 @@ private class Wiring {
         details = GetPatientDetailsUseCase(patients, allergies, answers, consents),
         update = UpdatePatientUseCase(patients, audit, clock, ids),
         deactivate = DeactivatePatientUseCase(patients, audit, clock, ids),
+        reactivate = ReactivatePatientUseCase(patients, audit, clock, ids),
         addAllergy = AddAllergyUseCase(patients, allergies, audit, clock, ids),
         updateAllergy = UpdateAllergyUseCase(allergies, audit, clock, ids),
         deactivateAllergy = DeactivateAllergyUseCase(allergies, audit, clock, ids),
@@ -107,7 +109,10 @@ private fun ApplicationTestBuilder.jsonClient() =
     createClient { install(ClientContentNegotiation) { json() } }
 
 private fun validRegistration(questionId: UUID) = RegisterPatientRequest(
-    profile = PatientProfileDto(lastName = "Dela Cruz", firstName = "Juan", sex = "MALE", dateOfBirth = "1990-01-01"),
+    profile = PatientProfileDto(
+        lastName = "Dela Cruz", firstName = "Juan", sex = "MALE",
+        dateOfBirth = "1990-01-01", mobileNumber = "09170000000",
+    ),
     allergies = listOf(AllergyInput("Penicillin", "SEVERE", null)),
     answers = listOf(IntakeAnswerInput(questionId.toString(), answerBoolean = true)),
     consents = listOf(ConsentInput("DATA_PRIVACY", "RA10173-v1", "PATIENT")),
@@ -180,7 +185,10 @@ class PatientRoutesTest : FunSpec({
                 contentType(ContentType.Application.Json)
                 setBody(
                     RegisterPatientRequest(
-                        profile = PatientProfileDto(lastName = "Reyes", firstName = "Ana", sex = "FEMALE", dateOfBirth = "1988-03-02"),
+                        profile = PatientProfileDto(
+                            lastName = "Reyes", firstName = "Ana", sex = "FEMALE",
+                            dateOfBirth = "1988-03-02", mobileNumber = "09170000001",
+                        ),
                     ),
                 )
             }
@@ -251,6 +259,111 @@ class PatientRoutesTest : FunSpec({
                 .body<List<IntakeQuestionResponse>>()
 
             questions.single().code shouldBe "previous_dentist"
+        }
+    }
+
+    test("POST /patients - non-legacy without mobileNumber - returns 400 invalid_request") {
+        val w = Wiring()
+        w.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1"))
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            val response = client.post("/patients") {
+                bearerAuth(w.dentistToken())
+                contentType(ContentType.Application.Json)
+                setBody(
+                    RegisterPatientRequest(
+                        profile = PatientProfileDto(lastName = "Reyes", firstName = "Ana", sex = "FEMALE", dateOfBirth = "1988-03-02"),
+                        consents = listOf(ConsentInput("DATA_PRIVACY", "RA10173-v1", "PATIENT")),
+                    ),
+                )
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+            response.body<com.pms.dental.auth.ErrorResponse>().error shouldBe "invalid_request"
+        }
+    }
+
+    test("POST /patients - duplicate questionId - returns 400 invalid_request") {
+        val w = Wiring()
+        val qid = UUID.randomUUID()
+        w.questions.seed(question("good_health", IntakeAnswerType.BOOLEAN, id = qid))
+        w.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1"))
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            val response = client.post("/patients") {
+                bearerAuth(w.dentistToken())
+                contentType(ContentType.Application.Json)
+                setBody(
+                    RegisterPatientRequest(
+                        profile = PatientProfileDto(
+                            lastName = "Dela Cruz", firstName = "Juan", sex = "MALE",
+                            dateOfBirth = "1990-01-01", mobileNumber = "09170000000",
+                        ),
+                        answers = listOf(
+                            IntakeAnswerInput(qid.toString(), answerBoolean = true),
+                            IntakeAnswerInput(qid.toString(), answerBoolean = false),
+                        ),
+                        consents = listOf(ConsentInput("DATA_PRIVACY", "RA10173-v1", "PATIENT")),
+                    ),
+                )
+            }
+
+            response.status shouldBe HttpStatusCode.BadRequest
+            response.body<com.pms.dental.auth.ErrorResponse>().error shouldBe "invalid_request"
+        }
+    }
+
+    test("GET /patients - non-integer limit - returns 400") {
+        val w = Wiring()
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            client.get("/patients?limit=abc") { bearerAuth(w.dentistToken()) }.status shouldBe HttpStatusCode.BadRequest
+        }
+    }
+
+    test("POST /patients/{id}/reactivate - unknown id - returns 404") {
+        val w = Wiring()
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            client.post("/patients/${UUID.randomUUID()}/reactivate") { bearerAuth(w.dentistToken()) }
+                .status shouldBe HttpStatusCode.NotFound
+        }
+    }
+
+    test("deactivated patient rejects edits with 409; reactivate restores editing") {
+        val w = Wiring()
+        val qid = UUID.randomUUID()
+        w.questions.seed(question("good_health", IntakeAnswerType.BOOLEAN, id = qid))
+        w.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1"))
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            val id = client.post("/patients") {
+                bearerAuth(w.dentistToken()); contentType(ContentType.Application.Json); setBody(validRegistration(qid))
+            }.body<PatientDetailsResponse>().patient.id
+
+            client.post("/patients/$id/deactivate") { bearerAuth(w.dentistToken()) }.status shouldBe HttpStatusCode.NoContent
+
+            val blocked = client.post("/patients/$id/allergies") {
+                bearerAuth(w.dentistToken()); contentType(ContentType.Application.Json); setBody(AllergyInput("Latex", "MILD", null))
+            }
+            blocked.status shouldBe HttpStatusCode.Conflict
+            blocked.body<com.pms.dental.auth.ErrorResponse>().error shouldBe "patient_inactive"
+
+            client.post("/patients/$id/reactivate") { bearerAuth(w.dentistToken()) }.status shouldBe HttpStatusCode.NoContent
+
+            client.post("/patients/$id/allergies") {
+                bearerAuth(w.dentistToken()); contentType(ContentType.Application.Json); setBody(AllergyInput("Latex", "MILD", null))
+            }.status shouldBe HttpStatusCode.Created
         }
     }
 })
