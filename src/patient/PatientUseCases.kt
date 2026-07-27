@@ -7,6 +7,7 @@ import com.pms.dental.domain.usecase.GetPatientDetailsUseCase
 import com.pms.dental.domain.usecase.ListConsentTextsUseCase
 import com.pms.dental.domain.usecase.ListIntakeQuestionsUseCase
 import com.pms.dental.domain.usecase.ListPatientsUseCase
+import com.pms.dental.domain.usecase.ReactivatePatientUseCase
 import com.pms.dental.domain.usecase.RecordConsentUseCase
 import com.pms.dental.domain.usecase.RegisterPatientUseCase
 import com.pms.dental.domain.usecase.UpdateAllergyUseCase
@@ -20,6 +21,7 @@ class PatientUseCases(
     val details: GetPatientDetailsUseCase,
     val update: UpdatePatientUseCase,
     val deactivate: DeactivatePatientUseCase,
+    val reactivate: ReactivatePatientUseCase,
     val addAllergy: AddAllergyUseCase,
     val updateAllergy: UpdateAllergyUseCase,
     val deactivateAllergy: DeactivateAllergyUseCase,

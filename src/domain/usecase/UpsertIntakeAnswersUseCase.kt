@@ -17,12 +17,12 @@ sealed interface UpsertAnswersResult {
     data class Rejected(val error: UpsertAnswersError) : UpsertAnswersResult
 }
 
-enum class UpsertAnswersError { PatientNotFound, UnknownQuestion, AnswerTypeMismatch }
+enum class UpsertAnswersError { PatientNotFound, PatientInactive, UnknownQuestion, AnswerTypeMismatch, AnswerNotInChoices }
 
 /**
- * Business rule: set/replace a patient's intake answers. The patient must exist, and every answer
- * must reference an active question and be answered in that question's type. All-or-nothing: if any
- * answer is invalid, none are written.
+ * Business rule: set/replace a patient's intake answers. The patient must exist and be active, and
+ * every answer must reference an active question, be answered in that question's type, and (for a
+ * CHOICE question) carry an allowed value. All-or-nothing: if any answer is invalid, none are written.
  */
 class UpsertIntakeAnswersUseCase(
     private val patients: PatientRepository,
@@ -37,7 +37,9 @@ class UpsertIntakeAnswersUseCase(
         inputs: List<NewAnswer>,
         actingUserId: UUID,
     ): UpsertAnswersResult {
-        if (!patients.existsById(patientId)) return UpsertAnswersResult.Rejected(UpsertAnswersError.PatientNotFound)
+        val patient = patients.findById(patientId)
+            ?: return UpsertAnswersResult.Rejected(UpsertAnswersError.PatientNotFound)
+        if (!patient.active) return UpsertAnswersResult.Rejected(UpsertAnswersError.PatientInactive)
 
         val known = questions.findByIds(inputs.map { it.questionId }.toSet()).associateBy { it.id }
         for (input in inputs) {
@@ -47,6 +49,9 @@ class UpsertIntakeAnswersUseCase(
             }
             if (!answerMatchesType(question.answerType, input)) {
                 return UpsertAnswersResult.Rejected(UpsertAnswersError.AnswerTypeMismatch)
+            }
+            if (!answerInChoices(question, input)) {
+                return UpsertAnswersResult.Rejected(UpsertAnswersError.AnswerNotInChoices)
             }
         }
 

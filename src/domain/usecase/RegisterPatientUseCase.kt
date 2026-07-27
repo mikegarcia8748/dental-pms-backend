@@ -1,5 +1,6 @@
 package com.pms.dental.domain.usecase
 
+import com.pms.dental.domain.model.AcknowledgedByRole
 import com.pms.dental.domain.model.Allergy
 import com.pms.dental.domain.model.AuditAction
 import com.pms.dental.domain.model.AuditEntry
@@ -38,8 +39,17 @@ enum class RegisterPatientError {
     /** An answer's value does not match its question's answer type. */
     AnswerTypeMismatch,
 
-    /** A consent references a (type, version) that has no matching consent text. */
+    /** A CHOICE answer's value is not one of the question's allowed choices. */
+    AnswerNotInChoices,
+
+    /** A consent references a (type, version) that has no matching *active* consent text. */
     UnknownConsentText,
+
+    /** A minor's consent was acknowledged by someone other than a guardian. */
+    MinorConsentRequiresGuardian,
+
+    /** The date of birth is in the future. */
+    FutureDateOfBirth,
 
     /** A legacy registration date was in the future. */
     FutureRegistrationDate,
@@ -69,12 +79,15 @@ class RegisterPatientUseCase(
             return RegisterPatientResult.Rejected(RegisterPatientError.FutureRegistrationDate)
         }
 
-        // A minor needs a guardian on record.
-        d.dateOfBirth?.let { dob ->
-            val age = Period.between(dob, LocalDate.ofInstant(now, zone)).years
-            if (age < 18 && (d.guardianName.isNullOrBlank() || d.guardianContact.isNullOrBlank())) {
-                return RegisterPatientResult.Rejected(RegisterPatientError.MinorRequiresGuardian)
-            }
+        // Date of birth can't be in the future; a minor needs a guardian on record.
+        val today = LocalDate.ofInstant(now, zone)
+        val dob = d.dateOfBirth
+        if (dob != null && dob.isAfter(today)) {
+            return RegisterPatientResult.Rejected(RegisterPatientError.FutureDateOfBirth)
+        }
+        val isMinor = dob != null && Period.between(dob, today).years < 18
+        if (isMinor && (d.guardianName.isNullOrBlank() || d.guardianContact.isNullOrBlank())) {
+            return RegisterPatientResult.Rejected(RegisterPatientError.MinorRequiresGuardian)
         }
 
         // The data-privacy basis is mandatory for a fresh (non-legacy) registration.
@@ -82,7 +95,8 @@ class RegisterPatientUseCase(
             return RegisterPatientResult.Rejected(RegisterPatientError.MissingDataPrivacyConsent)
         }
 
-        // Every answered question must exist, be active, and be answered in its own type.
+        // Every answered question must exist, be active, be answered in its own type, and — for a
+        // CHOICE question — carry an allowed value.
         val known = questions.findByIds(command.answers.map { it.questionId }.toSet()).associateBy { it.id }
         for (answer in command.answers) {
             val question = known[answer.questionId]
@@ -92,12 +106,20 @@ class RegisterPatientUseCase(
             if (!answerMatchesType(question.answerType, answer)) {
                 return RegisterPatientResult.Rejected(RegisterPatientError.AnswerTypeMismatch)
             }
+            if (!answerInChoices(question, answer)) {
+                return RegisterPatientResult.Rejected(RegisterPatientError.AnswerNotInChoices)
+            }
         }
 
-        // Every consent must reference a real consent-text version.
+        // Every consent must reference an active consent-text version; a minor's consents must be
+        // acknowledged by the guardian, not the patient.
         for (consent in command.consents) {
-            if (consentTexts.find(consent.type, consent.textVersion) == null) {
+            val text = consentTexts.find(consent.type, consent.textVersion)
+            if (text == null || !text.active) {
                 return RegisterPatientResult.Rejected(RegisterPatientError.UnknownConsentText)
+            }
+            if (isMinor && consent.acknowledgedByRole != AcknowledgedByRole.GUARDIAN) {
+                return RegisterPatientResult.Rejected(RegisterPatientError.MinorConsentRequiresGuardian)
             }
         }
 

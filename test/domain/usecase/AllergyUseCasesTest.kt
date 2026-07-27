@@ -54,6 +54,18 @@ class AllergyUseCasesTest : FunSpec({
         audit.entries.single().action shouldBe AuditAction.CREATE
     }
 
+    test("allergy add - deactivated patient - PatientInactive") {
+        val patients = FakePatientRepository()
+        val allergies = FakeAllergyRepository()
+        val audit = FakeAuditLogRepository()
+        patients.seed(patient(active = false))
+        val existing = patients.patients.values.single()
+        val useCase = AddAllergyUseCase(patients, allergies, audit, Clock { FIXED_NOW }, SequentialIds())
+
+        useCase(existing.id, NewAllergy("Penicillin", null, null), UUID.randomUUID()) shouldBe
+            AddAllergyResult.PatientInactive
+    }
+
     test("allergy update - allergy belongs to a different patient - NotFound") {
         val allergies = FakeAllergyRepository()
         val audit = FakeAuditLogRepository()

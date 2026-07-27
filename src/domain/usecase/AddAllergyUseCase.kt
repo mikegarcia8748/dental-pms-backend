@@ -14,9 +14,10 @@ import java.util.UUID
 sealed interface AddAllergyResult {
     data class Success(val allergy: Allergy) : AddAllergyResult
     data object PatientNotFound : AddAllergyResult
+    data object PatientInactive : AddAllergyResult
 }
 
-/** Business rule: add a structured allergy to an existing patient, attributed and audited. */
+/** Business rule: add a structured allergy to an existing, active patient, attributed and audited. */
 class AddAllergyUseCase(
     private val patients: PatientRepository,
     private val allergies: AllergyRepository,
@@ -25,7 +26,8 @@ class AddAllergyUseCase(
     private val idGenerator: IdGenerator,
 ) {
     suspend operator fun invoke(patientId: UUID, input: NewAllergy, actingUserId: UUID): AddAllergyResult {
-        if (!patients.existsById(patientId)) return AddAllergyResult.PatientNotFound
+        val patient = patients.findById(patientId) ?: return AddAllergyResult.PatientNotFound
+        if (!patient.active) return AddAllergyResult.PatientInactive
 
         val now = clock.now()
         val allergy = Allergy(
