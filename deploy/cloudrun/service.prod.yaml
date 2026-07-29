@@ -1,0 +1,89 @@
+# Cloud Run service — PROD environment (live deployment).
+#
+# Declarative Knative Service applied with:  gcloud run services replace service.prod.yaml --region <REGION>
+# deploy/deploy.ps1 substitutes the __IMAGE__ placeholder with the freshly built+pushed image.
+#
+# Fill in the REPLACE_* placeholders before the first deploy:
+#   - REPLACE_NEON_PROD_DIRECT_HOST : the DIRECT (non-pooled) endpoint host of your Neon *prod* branch
+#                                     (no "-pooler" in the hostname — Flyway's migration lock needs a real session).
+#   - REPLACE_FE_PROD_ORIGIN        : your production front-end origin as host[:port] (no scheme), e.g. app.example.com
+#
+# Secrets (DATABASE_PASSWORD, JWT_SECRET) are pulled from Secret Manager — create them once, see docs/environments.md.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: dental-pms-prod
+  annotations:
+    run.googleapis.com/ingress: all   # tighten to internal-and-cloud-load-balancing if you front it with an HTTPS LB.
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"   # keep 1 warm instance — avoids JVM + Neon cold starts on prod traffic.
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 60
+      timeoutSeconds: 300
+      containers:
+        - image: __IMAGE__
+          ports:
+            - name: http1
+              containerPort: 8080   # Cloud Run injects PORT=8080; the app reads PORT.
+          env:
+            - name: APP_ENV
+              value: "prod"
+            # DIRECT (non-pooled) Neon *prod* branch endpoint; sslmode=require.
+            - name: DATABASE_URL
+              value: "jdbc:postgresql://REPLACE_NEON_PROD_DIRECT_HOST/dental_pms?sslmode=require"
+            - name: DATABASE_USER
+              value: "neondb_owner"
+            - name: DATABASE_POOL_SIZE
+              value: "10"
+            - name: JWT_ISSUER
+              value: "dental-pms"
+            - name: JWT_AUDIENCE
+              value: "dental-pms-web"
+            - name: ACCESS_TOKEN_TTL_MINUTES
+              value: "15"
+            - name: REFRESH_TOKEN_TTL_DAYS
+              value: "14"
+            # Production front-end origin(s), comma-separated host[:port] (no scheme). MANDATORY in prod
+            # (the app refuses to start with APP_ENV=prod and an unset CORS_ALLOWED_HOSTS).
+            - name: CORS_ALLOWED_HOSTS
+              value: "REPLACE_FE_PROD_ORIGIN"
+            # ---- Secrets from Secret Manager (create once; see docs/environments.md) ----
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dental-pms-prod-db-password
+                  key: latest
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dental-pms-prod-jwt-secret
+                  key: latest
+            # ---- First-run bootstrap (OPTIONAL) --------------------------------------
+            # Seeds the initial accounts only while app_user is empty (idempotent). Wire these
+            # as secrets for the FIRST deploy, then remove them and redeploy. See docs/environments.md.
+            # - name: BOOTSTRAP_SYSADMIN_EMAIL
+            #   valueFrom: { secretKeyRef: { name: dental-pms-prod-bootstrap-sysadmin-email, key: latest } }
+            # - name: BOOTSTRAP_SYSADMIN_PASSWORD
+            #   valueFrom: { secretKeyRef: { name: dental-pms-prod-bootstrap-sysadmin-password, key: latest } }
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 30   # up to ~90s: covers JVM warmup + Neon cold-wake from autosuspend
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 3

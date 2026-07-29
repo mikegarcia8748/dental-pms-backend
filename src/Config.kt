@@ -40,13 +40,41 @@ object ServerConfig {
 }
 
 /**
- * Deployment profile. `APP_ENV=prod` (or `production`) turns on production-only guards; any other
- * value — including the unset default — is treated as development.
+ * The three first-class deployment profiles, selected by `APP_ENV`:
+ *  - [LOCAL] — a developer running the backend on their machine (`./kotlin run`), against a Neon local branch.
+ *  - [DEV]   — the containerized JVM on Cloud Run used for front-end dev/testing, against a Neon dev branch.
+ *  - [PROD]  — the live Cloud Run deployment, against the Neon prod branch; turns on production-only guards.
+ */
+enum class Environment {
+    LOCAL, DEV, PROD;
+
+    companion object {
+        /**
+         * Maps a raw `APP_ENV` value to a profile. `prod`/`production` → [PROD], `local` → [LOCAL];
+         * any unrecognized, blank, or null value falls back to [DEV], so a forgotten `APP_ENV` never
+         * silently enables production behavior.
+         */
+        fun from(raw: String?): Environment = when (raw?.trim()?.lowercase()) {
+            "prod", "production" -> PROD
+            "local" -> LOCAL
+            else -> DEV
+        }
+    }
+}
+
+/**
+ * Deployment profile. `APP_ENV=prod` (or `production`) turns on production-only guards; `local` marks a
+ * developer machine; any other value — including the unset default — is treated as `dev`.
  */
 object AppConfig {
+    /** Raw `APP_ENV` string (default `dev`). Kept for logging and backward compatibility. */
     val environment: String get() = Env.get("APP_ENV", "dev")
-    val isProduction: Boolean
-        get() = environment.equals("prod", ignoreCase = true) || environment.equals("production", ignoreCase = true)
+
+    /** Parsed deployment profile. Unrecognized or unset values fall back to [Environment.DEV]. */
+    val env: Environment get() = Environment.from(environment)
+
+    val isProduction: Boolean get() = env == Environment.PROD
+    val isLocal: Boolean get() = env == Environment.LOCAL
 }
 
 /**
