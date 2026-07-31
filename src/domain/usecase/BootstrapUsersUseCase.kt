@@ -1,6 +1,7 @@
 package com.pms.dental.domain.usecase
 
 import com.pms.dental.domain.model.AppUser
+import com.pms.dental.domain.model.AuthSource
 import com.pms.dental.domain.model.Role
 import com.pms.dental.domain.repository.AppUserRepository
 import com.pms.dental.domain.service.IdGenerator
@@ -41,6 +42,8 @@ class BootstrapUsersUseCase(
                     role = account.role,
                     active = true,
                     passwordHash = passwordHasher.hash(account.rawPassword),
+                    firebaseUid = null,
+                    authSource = AuthSource.LOCAL,
                 ),
             )
         }

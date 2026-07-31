@@ -18,6 +18,9 @@ bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 exposed-javaTime = { module = "org.jetbrains.exposed:exposed-java-time", version.ref = "exposed" }
+# Firebase ID tokens are verified as RS256 JWTs against Google's public JWKS — no Admin SDK, and so
+# no service-account credentials. com.auth0:java-jwt and com.auth0:jwks-rsa come in transitively via
+# Ktor's ktor-server-auth-jwt, which the app already uses for the LOCAL break-glass token.
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }

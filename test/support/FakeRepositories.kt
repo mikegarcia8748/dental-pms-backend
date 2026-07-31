@@ -15,7 +15,32 @@ class FakeAppUserRepository : AppUserRepository {
 
     override suspend fun findByEmail(email: String): AppUser? = byId.values.find { it.email == email }
     override suspend fun findById(id: UUID): AppUser? = byId[id]
+    override suspend fun findByFirebaseUid(firebaseUid: String): AppUser? =
+        byId.values.find { it.firebaseUid == firebaseUid }
     override suspend fun insert(user: AppUser) { byId[user.id] = user }
+
+    /**
+     * Mirrors the real conditional UPDATE: only an unclaimed row can be bound, and the boolean says
+     * whether *this* call did it. Set [failNextBind] to model losing the race to a concurrent
+     * first sign-in without needing real concurrency.
+     */
+    var failNextBind = false
+    override suspend fun bindFirebaseUid(id: UUID, firebaseUid: String): Boolean {
+        if (failNextBind) {
+            failNextBind = false
+            return false
+        }
+        val user = byId[id] ?: return false
+        if (user.firebaseUid != null) return false
+        byId[id] = user.copy(firebaseUid = firebaseUid)
+        return true
+    }
+
+    override suspend fun setActive(id: UUID, active: Boolean) {
+        byId[id]?.let { byId[id] = it.copy(active = active) }
+    }
+    override suspend fun list(activeOnly: Boolean?): List<AppUser> =
+        byId.values.filter { activeOnly == null || it.active == activeOnly }
     override suspend fun countAll(): Long = byId.size.toLong()
 }
 

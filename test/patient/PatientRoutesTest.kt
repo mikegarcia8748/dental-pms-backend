@@ -26,7 +26,10 @@ import com.pms.dental.domain.usecase.UpsertIntakeAnswersUseCase
 import com.pms.dental.infra.JwtAccessTokenIssuer
 import com.pms.dental.infra.UuidGenerator
 import com.pms.dental.support.FakeAllergyRepository
+import com.pms.dental.support.FakeAppUserRepository
 import com.pms.dental.support.FakeAuditLogRepository
+import com.pms.dental.domain.usecase.AuthenticateFirebaseUserUseCase
+import com.pms.dental.support.FakeFirebaseTokenVerifier
 import com.pms.dental.support.FakeConsentRepository
 import com.pms.dental.support.FakeConsentTextRepository
 import com.pms.dental.support.FakeIntakeQuestionRepository
@@ -92,6 +95,17 @@ private class Wiring {
     private val dentist = AppUser(UUID.randomUUID(), "dentist@clinic.test", "Dr. Molar", Role.DENTIST, true, "hash")
     private val sysadmin = AppUser(UUID.randomUUID(), "admin@clinic.test", "Admin", Role.SYSADMIN, true, "hash")
 
+    // Role/active are now resolved from the DB per request, so the token subjects must exist as rows.
+    val users = FakeAppUserRepository()
+
+    // These tests authenticate with LOCAL tokens; the Firebase path just has to be wired up.
+    val firebaseSignIn = AuthenticateFirebaseUserUseCase(FakeFirebaseTokenVerifier(), users)
+
+    init {
+        users.seed(dentist)
+        users.seed(sysadmin)
+    }
+
     fun dentistToken(): String = issuer.issue(dentist).token
     fun sysadminToken(): String = issuer.issue(sysadmin).token
 }
@@ -100,7 +114,7 @@ private fun ApplicationTestBuilder.installApp(w: Wiring) {
     application {
         configureSerialization()
         configureStatusPages()
-        configureSecurity(w.config)
+        configureSecurity(w.config, w.users, w.firebaseSignIn)
         routing { patientRoutes(w.useCases) }
     }
 }

@@ -1,6 +1,7 @@
 package com.pms.dental.domain.usecase
 
 import com.pms.dental.domain.model.AppUser
+import com.pms.dental.domain.model.AuthSource
 import com.pms.dental.domain.model.AuthTokens
 import com.pms.dental.domain.repository.AppUserRepository
 import com.pms.dental.domain.repository.RefreshTokenRepository
@@ -48,12 +49,16 @@ class AuthenticateUserUseCase(
 
     suspend operator fun invoke(email: String, rawPassword: String): AuthenticationResult {
         val user = users.findByEmail(email.trim().lowercase())
-        if (user == null) {
+        // Only LOCAL accounts carry a password. A Firebase account (null hash), like an unknown
+        // email, must never authenticate via this path — and must cost the same bcrypt work, so it
+        // can't be told apart by response time.
+        val localHash = user?.takeIf { it.authSource == AuthSource.LOCAL }?.passwordHash
+        if (user == null || localHash == null) {
             passwordHasher.verify(rawPassword, dummyHash) // equalize timing; result deliberately ignored
             return AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
         }
 
-        if (!passwordHasher.verify(rawPassword, user.passwordHash)) {
+        if (!passwordHasher.verify(rawPassword, localHash)) {
             return AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
         }
         // Only reveal deactivation to someone who already proved the credentials.

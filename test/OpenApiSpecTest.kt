@@ -1,9 +1,13 @@
 package com.pms.dental
 
+import com.pms.dental.admin.staffRoutes
 import com.pms.dental.auth.authRoutes
 import com.pms.dental.auth.configureSecurity
 import com.pms.dental.config.AuthConfig
+import com.pms.dental.domain.usecase.AuthenticateFirebaseUserUseCase
 import com.pms.dental.patient.patientRoutes
+import com.pms.dental.support.FakeAppUserRepository
+import com.pms.dental.support.FakeFirebaseTokenVerifier
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -13,6 +17,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import io.mockk.mockk
+
+/** Auth is only installed so the documented routes can mount; no request is ever authenticated here. */
+private fun firebaseSignIn() =
+    AuthenticateFirebaseUserUseCase(FakeFirebaseTokenVerifier(), FakeAppUserRepository())
 
 /**
  * Smoke test for the code-first OpenAPI generation: boot the app with the documented routes and assert
@@ -34,7 +42,7 @@ class OpenApiSpecTest : FunSpec({
         testApplication {
             application {
                 configureSerialization()
-                configureSecurity(config)
+                configureSecurity(config, FakeAppUserRepository(), firebaseSignIn())
                 configureOpenApi()
                 routing {
                     authRoutes(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
@@ -56,7 +64,7 @@ class OpenApiSpecTest : FunSpec({
         testApplication {
             application {
                 configureSerialization()
-                configureSecurity(config)
+                configureSecurity(config, FakeAppUserRepository(), firebaseSignIn())
                 configureOpenApi()
                 routing {
                     patientRoutes(mockk(relaxed = true))
@@ -69,6 +77,24 @@ class OpenApiSpecTest : FunSpec({
             spec shouldContain "/intake-questions"
             spec shouldContain "/consent-texts"
             spec shouldContain "PatientDetailsResponse"
+        }
+    }
+
+    test("the generated spec documents the staff admin endpoints and DTO schemas") {
+        testApplication {
+            application {
+                configureSerialization()
+                configureSecurity(config, FakeAppUserRepository(), firebaseSignIn())
+                configureOpenApi()
+                routing {
+                    staffRoutes(mockk(relaxed = true))
+                }
+            }
+
+            val spec = client.get("/api.json").bodyAsText()
+
+            spec shouldContain "/admin/staff"
+            spec shouldContain "StaffResponse"
         }
     }
 })

@@ -1,6 +1,7 @@
 package com.pms.dental.domain.usecase
 
 import com.pms.dental.domain.model.AppUser
+import com.pms.dental.domain.model.AuthSource
 import com.pms.dental.domain.model.AuthTokens
 import com.pms.dental.domain.model.Role
 import com.pms.dental.domain.repository.AppUserRepository
@@ -64,6 +65,26 @@ class AuthenticateUserUseCaseTest : BehaviorSpec({
 
                 // The bcrypt verify runs even for an unknown email, so response time can't enumerate users.
                 verify(exactly = 1) { passwordHasher.verify("whatever", "dummy-hash") }
+            }
+        }
+
+        `when`("the account is a Firebase account with no local password") {
+            then("it is rejected like an unknown email, running only the dummy verify for timing") {
+                val firebaseUser = user.copy(
+                    passwordHash = null,
+                    firebaseUid = "fb-uid-123",
+                    authSource = AuthSource.FIREBASE,
+                )
+                coEvery { users.findByEmail("dentist@clinic.test") } returns firebaseUser
+                every { passwordHasher.hash(any()) } returns "dummy-hash"
+                every { passwordHasher.verify(any(), any()) } returns false
+
+                authenticate("dentist@clinic.test", "any-password") shouldBe
+                    AuthenticationResult.Rejected(AuthenticationError.InvalidCredentials)
+
+                // Only the dummy hash is ever verified — a Firebase account can never authenticate via
+                // the password path, and can't be told apart from an unknown email by response time.
+                verify(exactly = 1) { passwordHasher.verify("any-password", "dummy-hash") }
             }
         }
 

@@ -1,5 +1,6 @@
 package com.pms.dental.auth
 
+import com.pms.dental.domain.model.AppUser
 import com.pms.dental.domain.model.Role
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -7,13 +8,12 @@ import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.application.install
 import io.ktor.server.auth.AuthenticationChecked
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import java.util.UUID
 
-/** The identity carried by a verified access token, decoded from its JWT claims. */
+/** The identity carried by a verified request, resolved from the Neon `app_user` row (not the token). */
 data class AuthenticatedUser(
     val id: UUID,
     val email: String,
@@ -21,19 +21,12 @@ data class AuthenticatedUser(
     val role: Role,
 )
 
-/** Decodes the authenticated user from the JWT principal, or null if unauthenticated/malformed. */
+/** Projects a persisted account onto the request-scoped identity. Role and active status live here. */
+internal fun AppUser.toAuthenticatedUser() = AuthenticatedUser(id, email, displayName, role)
+
+/** The user set by whichever provider (auth-local or auth-firebase) verified the request. */
 val ApplicationCall.authenticatedUser: AuthenticatedUser?
-    get() {
-        val payload = principal<JWTPrincipal>()?.payload ?: return null
-        val id = runCatching { UUID.fromString(payload.subject) }.getOrNull() ?: return null
-        val role = runCatching { Role.valueOf(payload.getClaim("role").asString()) }.getOrNull() ?: return null
-        return AuthenticatedUser(
-            id = id,
-            email = payload.getClaim("email").asString().orEmpty(),
-            displayName = payload.getClaim("name").asString().orEmpty(),
-            role = role,
-        )
-    }
+    get() = principal<AuthenticatedUser>()
 
 class RoleAuthorizationConfig {
     var allowed: Set<Role> = emptySet()
@@ -61,11 +54,11 @@ val RoleAuthorization = createRouteScopedPlugin("RoleAuthorization", ::RoleAutho
 }
 
 /**
- * Reusable RBAC primitive: require a verified access token (401 otherwise) and, when [roles] are
- * given, require one of them (403 otherwise). Later clinical routes hang off this.
+ * Reusable RBAC primitive: require a verified request via either provider (401 otherwise) and, when
+ * [roles] are given, require one of them (403 otherwise). Clinical and admin routes hang off this.
  */
 fun Route.authorize(vararg roles: Role, build: Route.() -> Unit) {
-    authenticate("auth-jwt") {
+    authenticate("auth-local", "auth-firebase") {
         install(RoleAuthorization) { allowed = roles.toSet() }
         build()
     }
