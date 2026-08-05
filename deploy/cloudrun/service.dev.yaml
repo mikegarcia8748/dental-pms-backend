@@ -52,14 +52,14 @@ spec:
               value: "14"
             # Front-end dev origin(s), comma-separated host[:port] (no scheme). Required in prod; set here too.
             - name: CORS_ALLOWED_HOSTS
-              value: "REPLACE_FE_DEV_ORIGIN"
+              value: "localhost:8083, 127.0.0.1:8083"
             # ---- Firebase Authentication ---------------------------------------------
             # ID tokens are verified against Google's public JWKS, so this project id is the only
             # Firebase setting needed — there is no service-account key to mount or rotate.
             # Without it the app boots with Firebase DISABLED (a warn log, not a startup failure)
             # and no staff member can sign in — only the LOCAL break-glass account.
             - name: FIREBASE_PROJECT_ID
-              value: "REPLACE_FIREBASE_DEV_PROJECT_ID"
+              value: "gen-lang-client-0189875791"
             # Claim policy applied to every staff ID token, on top of the signature / issuer /
             # audience / expiry checks. Shown explicitly (not left to the defaults) so the controls
             # in force are visible in the manifest.

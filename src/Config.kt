@@ -87,7 +87,7 @@ object AppConfig {
  * localhost allowlist no real browser will match.
  */
 object CorsConfig {
-    private val DEV_DEFAULT_HOSTS = listOf("localhost:8080", "127.0.0.1:8080")
+    private val DEV_DEFAULT_HOSTS = listOf("localhost:8083", "127.0.0.1:8083")
 
     val allowedHosts: List<String>
         get() {
