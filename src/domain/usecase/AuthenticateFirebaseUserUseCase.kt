@@ -52,9 +52,25 @@ class AuthenticateFirebaseUserUseCase(
             log.warn("Refusing to claim a staff invite for uid {}: the token's email is unverified", token.firebaseUid)
             return null
         }
-        val email = token.email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        val email = token.email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        if (email == null) {
+            log.warn("Cannot claim a staff invite for uid {}: the token carries no email claim", token.firebaseUid)
+            return null
+        }
 
-        val invite = users.findByEmail(email) ?: return null
+        val invite = users.findByEmail(email)
+        if (invite == null) {
+            // By far the most common cause of "Google sign-in worked but every request 401s": the
+            // person authenticated to Firebase fine, but nobody ever invited them here. Say so, and
+            // name the remedy — an unprovisioned account and a forged token are the same 401 on the
+            // wire, so this log line is the only thing that tells them apart.
+            log.warn(
+                "No staff invite for {}: the account authenticated with Google but has never been " +
+                    "provisioned. Invite it with POST /admin/staff using this exact address.",
+                email,
+            )
+            return null
+        }
         when {
             invite.authSource != AuthSource.FIREBASE -> {
                 // A LOCAL break-glass account is never convertible to a Firebase identity.
@@ -67,7 +83,12 @@ class AuthenticateFirebaseUserUseCase(
                 log.warn("Refusing to claim invite for {}: already bound to a different Firebase identity", email)
                 return null
             }
-            !invite.active -> return null
+            !invite.active -> {
+                // Offboarded before ever signing in. Deliberately not claimable: binding the uid now
+                // would leave a live identity attached to a deactivated account.
+                log.warn("Refusing to claim invite for {}: the account is deactivated", email)
+                return null
+            }
         }
 
         if (users.bindFirebaseUid(invite.id, token.firebaseUid)) {

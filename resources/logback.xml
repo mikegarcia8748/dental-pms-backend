@@ -9,4 +9,12 @@
     </root>
     <logger name="org.eclipse.jetty" level="INFO"/>
     <logger name="io.netty" level="INFO"/>
+    <!--
+      Why a Firebase ID token failed its signature / issuer / audience / expiry check, or that the
+      JWKS was unreachable. Logged at DEBUG because a routine bad token is not an operational event,
+      but under the INFO root that made a rejected sign-in produce no output at all — and the wire
+      response is a deliberately opaque 401, so there was nothing else to go on. Message only; the
+      token is a live credential and is never logged.
+    -->
+    <logger name="com.pms.dental.infra.JwtFirebaseTokenVerifier" level="DEBUG"/>
 </configuration>
