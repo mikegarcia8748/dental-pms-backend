@@ -1,5 +1,6 @@
 package com.pms.dental.domain.usecase
 
+import com.pms.dental.domain.model.AuthSource
 import com.pms.dental.domain.model.Role
 import com.pms.dental.domain.repository.AppUserRepository
 import com.pms.dental.domain.service.IdGenerator
@@ -67,7 +68,8 @@ class BootstrapUsersUseCaseTest : BehaviorSpec({
                 coVerify(exactly = 1) {
                     users.insert(match {
                         it.id == sysId && it.email == "sysadmin@clinic.test" &&
-                            it.role == Role.SYSADMIN && it.active && it.passwordHash == "sys-hash"
+                            it.role == Role.SYSADMIN && it.active && it.passwordHash == "sys-hash" &&
+                            it.authSource == AuthSource.LOCAL && it.firebaseUid == null
                     })
                 }
                 coVerify(exactly = 1) {

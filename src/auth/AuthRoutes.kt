@@ -121,7 +121,7 @@ fun Route.authRoutes(
             }
         }
 
-        authenticate("auth-jwt") {
+        authenticate("auth-local", "auth-firebase") {
             get("/me", {
                 summary = "Current user"
                 description = "Return the profile of the authenticated user."

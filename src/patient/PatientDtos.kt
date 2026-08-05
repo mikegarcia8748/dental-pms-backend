@@ -157,6 +157,7 @@ data class PatientSummaryResponse(
     val firstName: String,
     val middleName: String? = null,
     val dateOfBirth: String? = null,
+    val sex: String,
     val mobileNumber: String? = null,
     val isSenior: Boolean,
     val isPwd: Boolean,

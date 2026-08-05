@@ -99,11 +99,17 @@ class ExposedPatientRepository : PatientRepository {
     }
 }
 
-/** Name search (case-insensitive on last/first) plus the active filter, as a reusable predicate. */
+/**
+ * Search (case-insensitive on last/first name, plus the mobile number) with the active filter, as a
+ * reusable predicate. The mobile number is matched raw: phone numbers have no case, and `LIKE`
+ * against a NULL column yields NULL, which correctly drops patients with no number on file.
+ */
 private fun patientSearch(query: String, includeInactive: Boolean): Op<Boolean> {
     val activeOp: Op<Boolean> = if (includeInactive) Op.TRUE else (Patients.active eq true)
     if (query.isBlank()) return activeOp
     val pattern = "%${query.trim().lowercase()}%"
-    val byName = (Patients.lastName.lowerCase() like pattern) or (Patients.firstName.lowerCase() like pattern)
+    val byName = (Patients.lastName.lowerCase() like pattern) or
+        (Patients.firstName.lowerCase() like pattern) or
+        (Patients.mobileNumber like pattern)
     return activeOp and byName
 }

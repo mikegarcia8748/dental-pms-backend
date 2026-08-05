@@ -1,22 +1,34 @@
 package com.pms.dental
 
+import com.pms.dental.admin.StaffUseCases
 import com.pms.dental.config.AuthConfig
 import com.pms.dental.config.DatabaseConfig
+import com.pms.dental.config.FirebaseConfig
 import com.pms.dental.data.ExposedAppUserRepository
 import com.pms.dental.data.ExposedRefreshTokenRepository
 import com.pms.dental.domain.repository.AppUserRepository
 import com.pms.dental.domain.repository.RefreshTokenRepository
 import com.pms.dental.domain.service.AccessTokenIssuer
 import com.pms.dental.domain.service.Clock
+import com.pms.dental.domain.service.FirebaseTokenPolicy
+import com.pms.dental.domain.service.FirebaseTokenVerifier
+import com.pms.dental.domain.service.PolicyCheckingFirebaseTokenVerifier
 import com.pms.dental.domain.service.IdGenerator
 import com.pms.dental.domain.service.PasswordHasher
 import com.pms.dental.domain.service.RefreshTokenFactory
+import com.pms.dental.domain.usecase.AuthenticateFirebaseUserUseCase
 import com.pms.dental.domain.usecase.AuthenticateUserUseCase
 import com.pms.dental.domain.usecase.BootstrapUsersUseCase
+import com.pms.dental.domain.usecase.GetStaffUseCase
+import com.pms.dental.domain.usecase.ListStaffUseCase
 import com.pms.dental.domain.usecase.LogoutUseCase
+import com.pms.dental.domain.usecase.OffboardStaffUseCase
+import com.pms.dental.domain.usecase.ProvisionStaffUseCase
+import com.pms.dental.domain.usecase.ReactivateStaffUseCase
 import com.pms.dental.domain.usecase.RefreshAccessTokenUseCase
 import com.pms.dental.infra.BcryptPasswordHasher
 import com.pms.dental.infra.DatabaseFactory
+import com.pms.dental.infra.JwtFirebaseTokenVerifier
 import com.pms.dental.infra.JwtAccessTokenIssuer
 import com.pms.dental.infra.SecureRandomRefreshTokenFactory
 import com.pms.dental.infra.SystemClock
@@ -59,7 +71,28 @@ import org.koin.logger.slf4jLogger
 val appModule = module {
     single { AuthConfig.fromEnv() }
     single { DatabaseConfig.fromEnv() }
+    single { FirebaseConfig.fromEnv() }
     single { DatabaseFactory(get()) }
+
+    single {
+        val config = get<FirebaseConfig>()
+        FirebaseTokenPolicy(
+            requireVerifiedEmail = config.requireVerifiedEmail,
+            allowedSignInProviders = config.allowedSignInProviders,
+            maxSessionAge = config.maxSessionAge,
+            clock = get(),
+        )
+    }
+    // The policy decorator wraps the JWKS verifier, so every consumer of FirebaseTokenVerifier gets
+    // the claim checks — there is no unwrapped binding to accidentally inject. Constructing this
+    // contacts nothing: the key set is fetched lazily on the first token.
+    single<FirebaseTokenVerifier> {
+        PolicyCheckingFirebaseTokenVerifier(
+            delegate = JwtFirebaseTokenVerifier(projectId = get<FirebaseConfig>().projectId),
+            policy = get(),
+        )
+    }
+    single { AuthenticateFirebaseUserUseCase(get(), get()) }
 
     single<Clock> { SystemClock() }
     single<IdGenerator> { UuidGenerator() }
@@ -87,6 +120,14 @@ val appModule = module {
     }
     single { LogoutUseCase(get(), get()) }
     single { BootstrapUsersUseCase(get(), get(), get()) }
+
+    // Staff administration slice (Firebase-provisioned staff + break-glass management)
+    single { ProvisionStaffUseCase(get(), get()) }
+    single { ListStaffUseCase(get()) }
+    single { GetStaffUseCase(get()) }
+    single { OffboardStaffUseCase(get()) }
+    single { ReactivateStaffUseCase(get()) }
+    single { StaffUseCases(get(), get(), get(), get(), get()) }
 
     // Patient registration & intake slice
     single<PatientRepository> { ExposedPatientRepository() }

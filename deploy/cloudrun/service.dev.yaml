@@ -7,8 +7,10 @@
 #   - REPLACE_NEON_DEV_DIRECT_HOST : the DIRECT (non-pooled) endpoint host of your Neon *dev* branch
 #                                    (no "-pooler" in the hostname — Flyway's migration lock needs a real session).
 #   - REPLACE_FE_DEV_ORIGIN        : your front-end dev origin as host[:port] (no scheme), e.g. dev.app.example.com
+#   - REPLACE_FIREBASE_DEV_PROJECT_ID : the Firebase project whose ID tokens this environment accepts
 #
-# Secrets (DATABASE_PASSWORD, JWT_SECRET) are pulled from Secret Manager — create them once, see docs/environments.md.
+# Secrets (DATABASE_PASSWORD, JWT_SECRET) are pulled from Secret Manager — create them once,
+# see docs/environments.md. Firebase needs no secret: tokens are verified against public keys.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -50,7 +52,29 @@ spec:
               value: "14"
             # Front-end dev origin(s), comma-separated host[:port] (no scheme). Required in prod; set here too.
             - name: CORS_ALLOWED_HOSTS
-              value: "REPLACE_FE_DEV_ORIGIN"
+              value: "localhost:8083, 127.0.0.1:8083"
+            # ---- Firebase Authentication ---------------------------------------------
+            # ID tokens are verified against Google's public JWKS, so this project id is the only
+            # Firebase setting needed — there is no service-account key to mount or rotate.
+            # Without it the app boots with Firebase DISABLED (a warn log, not a startup failure)
+            # and no staff member can sign in — only the LOCAL break-glass account.
+            - name: FIREBASE_PROJECT_ID
+              value: "gen-lang-client-0189875791"
+            # Claim policy applied to every staff ID token, on top of the signature / issuer /
+            # audience / expiry checks. Shown explicitly (not left to the defaults) so the controls
+            # in force are visible in the manifest.
+            - name: FIREBASE_REQUIRE_VERIFIED_EMAIL
+              value: "true"
+            # Comma-separated `firebase.sign_in_provider` allowlist. Staff use the "Sign in with
+            # Google" button, so the flow produces `google.com`.
+            - name: FIREBASE_ALLOWED_SIGN_IN_PROVIDERS
+              value: "google.com"
+            # Max age of the token's `auth_time` — how long a sign-in stays good before the user
+            # must authenticate again. NOT the ID token lifetime (the client SDK refreshes that
+            # hourly without re-authenticating). 0 disables. Ship 0 until the front-end handles the
+            # 401 → sign-out → sign-in path, then raise it; see docs/api-contracts/auth.md.
+            - name: FIREBASE_MAX_SESSION_AGE_HOURS
+              value: "12"
             # ---- Secrets from Secret Manager (create once; see docs/environments.md) ----
             - name: DATABASE_PASSWORD
               valueFrom:

@@ -1,5 +1,7 @@
 package com.pms.dental
 
+import com.pms.dental.admin.StaffUseCases
+import com.pms.dental.admin.staffRoutes
 import com.pms.dental.auth.authRoutes
 import com.pms.dental.domain.usecase.AuthenticateUserUseCase
 import com.pms.dental.domain.usecase.LogoutUseCase
@@ -19,11 +21,13 @@ fun Application.configureRouting() {
     val refresh by inject<RefreshAccessTokenUseCase>()
     val logout by inject<LogoutUseCase>()
     val patientUseCases by inject<PatientUseCases>()
+    val staffUseCases by inject<StaffUseCases>()
 
     routing {
         systemRoutes()
         authRoutes(login, refresh, logout)
         patientRoutes(patientUseCases)
+        staffRoutes(staffUseCases)
     }
 }
 

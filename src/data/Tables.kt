@@ -15,7 +15,9 @@ object AppUsers : Table("app_user") {
     val displayName = varchar("display_name", 200)
     val role = varchar("role", 20)
     val active = bool("active")
-    val passwordHash = varchar("password_hash", 100)
+    val passwordHash = varchar("password_hash", 100).nullable()
+    val firebaseUid = varchar("firebase_uid", 128).nullable()
+    val authSource = varchar("auth_source", 20)
     val createdAt = timestamp("created_at")
     override val primaryKey = PrimaryKey(id)
 }

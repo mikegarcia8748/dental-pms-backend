@@ -20,3 +20,6 @@ Thumbs.db
 
 # Logs
 *.log
+/.claude/worktrees/multi-env-config/
+/.idea/amper.xml
+/.idea/AndroidProjectSystem.xml

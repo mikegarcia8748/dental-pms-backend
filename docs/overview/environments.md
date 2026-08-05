@@ -33,6 +33,34 @@ working directory fills in the rest for local runs. There is **no `application.c
 | `DATABASE_PASSWORD`  | yes      | Local: `.env`. dev/prod: Secret Manager (never in a manifest). |
 | `DATABASE_POOL_SIZE` | no (5)   | Keep small per instance — Neon caps connections; Cloud Run scales horizontally. Suggested: local 5, dev 5, prod 10. |
 
+### Firebase Authentication variables
+
+**There are no Firebase credentials to configure.** Staff ID tokens are RS256 JWTs signed by Google;
+the backend verifies them against Google's public JWKS, so `FIREBASE_PROJECT_ID` is the whole of what
+it needs — no service-account key, no `google-services.json`, nothing to rotate or leak. The
+front-end's own Firebase Web SDK config (`apiKey`, `authDomain`, `projectId`) is public and lives in
+the client repo.
+
+Without a project id Firebase is disabled with a warn-level log — deliberately not a startup failure,
+so a Firebase or Google outage can never lock the clinic out of its own break-glass account. The flip
+side: a half-configured deployment looks healthy while no staff member can sign in. Check the startup
+log, which states the project and the policy in force on every boot.
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `FIREBASE_PROJECT_ID` | for staff sign-in | The project whose ID tokens are accepted — it is the token's `aud` and the tail of its `iss`. |
+| `FIREBASE_REQUIRE_VERIFIED_EMAIL` | no (`true`) | Reject tokens whose `email_verified` is false. Google always asserts it for its own accounts. |
+| `FIREBASE_ALLOWED_SIGN_IN_PROVIDERS` | no (`google.com`) | Comma-separated `firebase.sign_in_provider` allowlist. Anything listed can authenticate to the clinical API. |
+| `FIREBASE_MAX_SESSION_AGE_HOURS` | no (`12`) | Max age of the token's `auth_time`. `0` disables. See the front-end contract in [api-contracts/auth.md](api-contracts/auth.md). |
+
+Unlike the project id, the three policy variables **fail fast**: a value that is set but unparseable
+stops the boot rather than silently relaxing a security control.
+
+> **Outbound access.** Verification fetches Google's signing keys from
+> `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`, cached
+> for six hours. If a deployment restricts egress, that host must be reachable — otherwise staff
+> sign-in fails once the cache expires. The LOCAL break-glass account is the designed escape hatch.
+
 ---
 
 ## Neon setup (one time)
@@ -115,6 +143,8 @@ printf '%s' 'YOUR_NEON_DEV_PASSWORD' | gcloud secrets create dental-pms-dev-db-p
 openssl rand -base64 48 | tr -d '\n' | gcloud secrets create dental-pms-dev-jwt-secret --data-file=-
 ```
 
+Firebase needs no secret — see [Firebase Authentication variables](#firebase-authentication-variables).
+
 Grant the Cloud Run runtime service account access to read secrets (default compute SA shown; use
 your dedicated runtime SA if you have one):
 
@@ -133,6 +163,8 @@ Edit `deploy/cloudrun/service.dev.yaml` (and `service.prod.yaml`) and replace th
 
 - `REPLACE_NEON_DEV_DIRECT_HOST` / `REPLACE_NEON_PROD_DIRECT_HOST` — the Neon **direct** endpoint host.
 - `REPLACE_FE_DEV_ORIGIN` / `REPLACE_FE_PROD_ORIGIN` — the front-end origin as `host[:port]` (no scheme).
+- `REPLACE_FIREBASE_DEV_PROJECT_ID` / `REPLACE_FIREBASE_PROD_PROJECT_ID` — the Firebase project whose
+  ID tokens that environment accepts.
 
 (The deploy script refuses to deploy while any `REPLACE_` placeholder remains.)
 

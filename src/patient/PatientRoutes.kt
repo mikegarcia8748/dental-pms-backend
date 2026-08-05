@@ -519,6 +519,7 @@ private fun Patient.toSummary() = PatientSummaryResponse(
     firstName = firstName,
     middleName = middleName,
     dateOfBirth = dateOfBirth?.toString(),
+    sex = sex.name,
     mobileNumber = mobileNumber,
     isSenior = isSenior,
     isPwd = isPwd,
