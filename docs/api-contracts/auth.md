@@ -373,10 +373,10 @@ These are **LOCAL** (`authSource = LOCAL`) break-glass accounts — the always-a
 in when Firebase is unavailable. Bootstrap is idempotent (a restart with existing users
 does nothing). Ongoing **Firebase staff** are then provisioned by a SysAdmin through
 [admin-staff.md](admin-staff.md), not seeded here. See
-[access-control-and-roles.md](../access-control-and-roles.md).
+[access-control-and-roles.md](../overview/access-control-and-roles.md).
 
 ## See also
 
 - [admin-staff.md](admin-staff.md) — provisioning and lifecycle of Firebase staff accounts.
 - [system.md](system.md) — health & discovery endpoints.
-- [access-control-and-roles.md](../access-control-and-roles.md) — role model & enforcement.
+- [access-control-and-roles.md](../overview/access-control-and-roles.md) — role model & enforcement.

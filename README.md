@@ -2,7 +2,7 @@
 
 Practice management system for a dental clinic — patient records, dental chart,
 visits, procedures, billing and payments. See [docs/](docs/) for the functional
-specification, starting with [project-overview.md](docs/project-overview.md).
+specification, starting with [project-overview.md](docs/overview/project-overview.md).
 
 ## Stack
 

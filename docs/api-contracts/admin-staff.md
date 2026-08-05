@@ -223,4 +223,4 @@ DTOs defined in `src/admin/StaffDtos.kt`. Fields are required and non-null on th
 ## See also
 
 - [auth.md](auth.md) — the two credential types and the break-glass login lifecycle.
-- [access-control-and-roles.md](../access-control-and-roles.md) — role model & enforcement.
+- [access-control-and-roles.md](../overview/access-control-and-roles.md) — role model & enforcement.

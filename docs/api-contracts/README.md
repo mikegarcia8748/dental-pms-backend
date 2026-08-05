@@ -27,7 +27,7 @@ here ever disagrees with `/api.json`, the running spec wins.
 > kebab-case if multi-word). As new modules ship (patients, visits, dental chart,
 > billing, …) add a `<module>.md` here and a row to the table above. Only
 > currently-built endpoints are documented; planned modules live in the
-> [functional spec](../project-overview.md) until they exist.
+> [functional spec](../overview/project-overview.md) until they exist.
 
 ## Global conventions
 
@@ -148,5 +148,5 @@ sequenceDiagram
 
 ## See also
 
-- [access-control-and-roles.md](../access-control-and-roles.md) — roles and enforcement rationale.
-- [project-overview.md](../project-overview.md) — product scope and the full doc index.
+- [access-control-and-roles.md](../overview/access-control-and-roles.md) — roles and enforcement rationale.
+- [project-overview.md](../overview/project-overview.md) — product scope and the full doc index.
