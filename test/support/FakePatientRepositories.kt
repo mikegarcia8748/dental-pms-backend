@@ -63,8 +63,12 @@ class FakePatientRepository : PatientRepository {
 
     fun seed(patient: Patient) { patients[patient.id] = patient }
 
+    /** Mirrors `patientSearch` in ExposedPatientRepository: last name, first name, or mobile number. */
     private fun Patient.matches(query: String): Boolean =
-        query.isBlank() || lastName.contains(query, ignoreCase = true) || firstName.contains(query, ignoreCase = true)
+        query.isBlank() ||
+            lastName.contains(query, ignoreCase = true) ||
+            firstName.contains(query, ignoreCase = true) ||
+            mobileNumber?.contains(query, ignoreCase = true) == true
 }
 
 class FakeAllergyRepository : AllergyRepository {

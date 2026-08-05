@@ -261,6 +261,49 @@ class PatientRoutesTest : FunSpec({
         }
     }
 
+    test("register then search - GET /patients finds the new patient by mobile number") {
+        val w = Wiring()
+        val questionId = UUID.randomUUID()
+        w.questions.seed(question("good_health", IntakeAnswerType.BOOLEAN, id = questionId))
+        w.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1"))
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            client.post("/patients") {
+                bearerAuth(w.dentistToken())
+                contentType(ContentType.Application.Json)
+                setBody(validRegistration(questionId))
+            }.status shouldBe HttpStatusCode.Created
+
+            val page = client.get("/patients?q=09170000000") { bearerAuth(w.dentistToken()) }
+                .body<PatientPageResponse>()
+            page.total shouldBe 1
+            page.patients.single().mobileNumber shouldBe "09170000000"
+        }
+    }
+
+    test("GET /patients - the summary carries the patient's sex") {
+        val w = Wiring()
+        val questionId = UUID.randomUUID()
+        w.questions.seed(question("good_health", IntakeAnswerType.BOOLEAN, id = questionId))
+        w.consentTexts.seed(consentText(ConsentType.DATA_PRIVACY, "RA10173-v1"))
+        testApplication {
+            installApp(w)
+            val client = jsonClient()
+
+            client.post("/patients") {
+                bearerAuth(w.dentistToken())
+                contentType(ContentType.Application.Json)
+                setBody(validRegistration(questionId))
+            }.status shouldBe HttpStatusCode.Created
+
+            val page = client.get("/patients") { bearerAuth(w.dentistToken()) }.body<PatientPageResponse>()
+
+            page.patients.single().sex shouldBe "MALE"
+        }
+    }
+
     test("GET /intake-questions?section=DENTAL - returns only the seeded dental questions") {
         val w = Wiring()
         w.questions.seed(question("previous_dentist", IntakeAnswerType.TEXT, IntakeSection.DENTAL, displayOrder = 1))
