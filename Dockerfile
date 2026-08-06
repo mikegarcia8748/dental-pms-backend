@@ -26,9 +26,7 @@ COPY src ./src
 
 # The cache mounts keep the Kotlin toolchain and Maven dependencies out of the image
 # layers and make rebuilds fast. They need BuildKit, which is the default in Docker 23+.
-RUN --mount=type=cache,target=/root/.kotlin \
-    --mount=type=cache,target=/root/.m2 \
-    ./kotlin --shared-cache-dir=/root/.kotlin package --format=executable-jar \
+RUN ./kotlin --shared-cache-dir=/root/.kotlin package --format=executable-jar \
  && cp build/tasks/*executableJarJvm/*-executable.jar /app.jar
 
 # ---- Runtime stage ---------------------------------------------------------
