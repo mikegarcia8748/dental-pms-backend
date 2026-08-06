@@ -1,0 +1,81 @@
+# Push-to-deploy pipeline for the DEV Cloud Run service.
+#
+# Wired to a Cloud Build trigger on this repository. It does exactly what deploy/deploy.ps1
+# does by hand — build, push, substitute __IMAGE__, apply the manifest — so the deployed
+# configuration always comes from deploy/cloudrun/service.dev.yaml, reviewed in git, and
+# never from flags typed into the console.
+#
+# This replaces the pipeline Cloud Build auto-generates for "continuous deployment", whose
+# deploy step is `gcloud run services update --image` and nothing else. That step never
+# applied the manifest, so revisions came up with no DATABASE_URL and no Secret Manager
+# mounts; the app fails fast on those (src/config/DatabaseConfig.kt) before Netty binds a
+# socket, and Cloud Run reports only "container failed to start and listen on PORT".
+#
+# Running it outside the trigger — SHORT_SHA is a trigger-supplied built-in, so pass one:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+
+substitutions:
+  # Must match the region the Cloud Run service actually lives in.
+  _REGION: asia-southeast1
+  # Artifact Registry (Docker) repo. It must already exist — see docs/overview/environments.md.
+  # `cloud-run-source-deploy` is the repo the auto-generated pipeline creates; switch this to
+  # `dental-pms` (the name deploy.ps1 uses) once that repo exists.
+  _AR_REPO: cloud-run-source-deploy
+  _MANIFEST: deploy/cloudrun/service.dev.yaml
+
+steps:
+  # The multi-stage Dockerfile at the repo root builds the Amper module and copies the
+  # executable jar into a JRE runtime image.
+  - id: Build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/dental-pms:${SHORT_SHA}
+      - .
+
+  # Pushed explicitly rather than left to the `images:` block below, because the deploy
+  # step runs before that block and Cloud Run has to be able to pull the image.
+  - id: Push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/dental-pms:${SHORT_SHA}
+
+  # `$$` escapes a dollar sign for the shell — a bare `$` would be read as a Cloud Build
+  # substitution and fail the build.
+  - id: Deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        image="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/dental-pms:${SHORT_SHA}"
+        rendered="$$(mktemp)"
+        sed "s|__IMAGE__|$${image}|g" "${_MANIFEST}" > "$${rendered}"
+
+        # Same guard as deploy/deploy.ps1: an unfilled placeholder deploys a revision that
+        # cannot reach its database, and that surfaces only as an opaque startup timeout.
+        # Comment lines are excluded — the manifest's header documents the placeholders by name.
+        placeholders="$$(grep -nE 'REPLACE_' "$${rendered}" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
+        if [ -n "$${placeholders}" ]; then
+          echo "ERROR: ${_MANIFEST} still contains REPLACE_ placeholders:" >&2
+          echo "$${placeholders}" >&2
+          exit 1
+        fi
+
+        echo "==> Applying ${_MANIFEST} with image $${image}"
+        gcloud run services replace "$${rendered}" --region "${_REGION}"
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/dental-pms:${SHORT_SHA}
+
+# The Amper wrapper downloads its own toolchain and the full dependency set on every build:
+# the Dockerfile's BuildKit cache mounts were removed in 824f607, and the classic builder
+# Cloud Build runs would ignore them regardless. The 10-minute default is not enough.
+timeout: 1800s
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY

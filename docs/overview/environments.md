@@ -13,11 +13,11 @@ there is no code that hardcodes or switches between connection strings.
 ## Configuration model
 
 All configuration is environment-variable driven through the `Env` object in
-[`src/Config.kt`](../src/Config.kt) — real environment variables win, and a `.env` file in the
+[`src/Config.kt`](../../src/Config.kt) — real environment variables win, and a `.env` file in the
 working directory fills in the rest for local runs. There is **no `application.conf`**.
 
 - **One `DATABASE_URL` per environment.** The app always reads a single `DATABASE_URL`
-  ([`DatabaseConfig`](../src/config/DatabaseConfig.kt)); each environment supplies its own value.
+  ([`DatabaseConfig`](../../src/config/DatabaseConfig.kt)); each environment supplies its own value.
   The production connection string never lives in the repo — only in the prod Cloud Run service.
 - **`APP_ENV`** selects the profile (`AppConfig` in `src/Config.kt`): `prod`/`production` → `PROD`
   (turns on production-only guards), `local` → `LOCAL`, anything else/unset → `DEV`.
@@ -51,7 +51,7 @@ log, which states the project and the policy in force on every boot.
 | `FIREBASE_PROJECT_ID` | for staff sign-in | The project whose ID tokens are accepted — it is the token's `aud` and the tail of its `iss`. |
 | `FIREBASE_REQUIRE_VERIFIED_EMAIL` | no (`true`) | Reject tokens whose `email_verified` is false. Google always asserts it for its own accounts. |
 | `FIREBASE_ALLOWED_SIGN_IN_PROVIDERS` | no (`google.com`) | Comma-separated `firebase.sign_in_provider` allowlist. Anything listed can authenticate to the clinical API. |
-| `FIREBASE_MAX_SESSION_AGE_HOURS` | no (`12`) | Max age of the token's `auth_time`. `0` disables. See the front-end contract in [api-contracts/auth.md](api-contracts/auth.md). |
+| `FIREBASE_MAX_SESSION_AGE_HOURS` | no (`12`) | Max age of the token's `auth_time`. `0` disables. See the front-end contract in [api-contracts/auth.md](../api-contracts/auth.md). |
 
 Unlike the project id, the three policy variables **fail fast**: a value that is set but unparseable
 stops the boot rather than silently relaxing a security control.
@@ -107,12 +107,24 @@ jdbc:postgresql://ep-xxxx-xxxxxxxx.ap-southeast-1.aws.neon.tech/dental_pms?sslmo
 
 ## Cloud Run environments (dev & prod)
 
-Deployment artifacts live in [`deploy/`](../deploy):
+Deployment artifacts live in [`deploy/`](../../deploy), plus `cloudbuild.yaml` at the repo root:
 
 - `deploy/cloudrun/service.dev.yaml`, `deploy/cloudrun/service.prod.yaml` — declarative Knative
   service manifests (env vars, Secret Manager refs, `/health` probes, autoscaling).
-- `deploy/deploy.ps1` — builds the image, pushes it to Artifact Registry, substitutes `__IMAGE__`
-  in the chosen manifest, and applies it with `gcloud run services replace`.
+- `cloudbuild.yaml` — the push-to-deploy pipeline for **dev**: build, push, substitute `__IMAGE__`,
+  `gcloud run services replace`.
+- `deploy/deploy.ps1` — the same four steps from a developer machine, for out-of-band and **prod**
+  deploys.
+
+Both paths apply the *same manifest*, so a service's configuration is whatever git says it is.
+Nothing is passed as `gcloud run` flags, and console edits are overwritten by the next deploy.
+
+> **Why this matters.** The pipeline Cloud Build auto-generates for continuous deployment runs
+> `gcloud run services update --image` and nothing else — it never applies the manifest. A revision
+> deployed that way has no `DATABASE_URL` and no secret mounts, so the app fails fast in
+> `DatabaseConfig`/`AuthConfig` before Netty binds a socket, and Cloud Run reports only the generic
+> "container failed to start and listen on the port defined by PORT". If you ever see that error,
+> check the revision's env vars before you suspect the code.
 
 ### One-time GCP setup
 
@@ -162,13 +174,37 @@ done
 Edit `deploy/cloudrun/service.dev.yaml` (and `service.prod.yaml`) and replace the placeholders:
 
 - `REPLACE_NEON_DEV_DIRECT_HOST` / `REPLACE_NEON_PROD_DIRECT_HOST` — the Neon **direct** endpoint host.
-- `REPLACE_FE_DEV_ORIGIN` / `REPLACE_FE_PROD_ORIGIN` — the front-end origin as `host[:port]` (no scheme).
-- `REPLACE_FIREBASE_DEV_PROJECT_ID` / `REPLACE_FIREBASE_PROD_PROJECT_ID` — the Firebase project whose
-  ID tokens that environment accepts.
+- `REPLACE_FE_PROD_ORIGIN` — the front-end origin as `host[:port]` (no scheme).
+- `REPLACE_FIREBASE_PROD_PROJECT_ID` — the Firebase project whose ID tokens that environment accepts.
 
-(The deploy script refuses to deploy while any `REPLACE_` placeholder remains.)
+Also check `metadata.name` matches the Cloud Run service you intend to deploy to: `services replace`
+addresses the service by name, so a mismatch quietly creates a second service on a different URL.
 
-### Deploy
+Both deploy paths refuse to run while any `REPLACE_` placeholder remains — a half-filled manifest
+would otherwise deploy a revision that cannot reach its database, which surfaces only as a startup
+timeout.
+
+### Deploy: push-to-deploy (dev)
+
+A Cloud Build trigger on this repository runs `cloudbuild.yaml` on every push to the deployment
+branch. Configure the trigger with:
+
+| Setting | Value |
+|---|---|
+| Configuration | Cloud Build configuration file → `cloudbuild.yaml` |
+| `_REGION` | the region the service lives in (must match) |
+| `_AR_REPO` | the Artifact Registry Docker repo to push to |
+| `_MANIFEST` | `deploy/cloudrun/service.dev.yaml` (the default) |
+
+The **Cloud Build** service account needs `roles/run.admin` (to run `services replace`) and
+`roles/iam.serviceAccountUser` on the Cloud Run runtime service account. The **runtime** service
+account needs `roles/secretmanager.secretAccessor` on the two secrets, as granted above; without it
+the revision fails with an explicit secret-access error rather than a startup timeout.
+
+The build allows 30 minutes — the Amper wrapper downloads its toolchain and full dependency set on
+every build, which does not fit Cloud Build's 10-minute default.
+
+### Deploy: from a developer machine (and prod)
 
 ```powershell
 # Provide identifiers via params or env vars

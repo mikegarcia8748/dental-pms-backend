@@ -72,8 +72,15 @@ if ([string]::IsNullOrWhiteSpace($Tag)) {
     $Tag = $sha.Trim()
 }
 
-$image   = "$Region-docker.pkg.dev/$ProjectId/$Repo/dental-pms:$Tag"
-$service = "dental-pms-$Environment"
+$image = "$Region-docker.pkg.dev/$ProjectId/$Repo/dental-pms:$Tag"
+
+# The service name comes from the manifest rather than a naming convention: `services replace`
+# addresses the service by metadata.name, so that is the only name that decides what gets deployed.
+# (metadata.name is the sole `name:` key at two-space indent; the others sit deeper, under env/ports.)
+$manifestRaw = Get-Content -Raw $manifest
+$nameMatch = [regex]::Match($manifestRaw, '(?m)^  name:\s*(\S+)\s*$')
+if (-not $nameMatch.Success) { Fail "Could not read metadata.name from $manifest." }
+$service = $nameMatch.Groups[1].Value
 
 Write-Host "==> Environment : $Environment"
 Write-Host "==> Service     : $service"
@@ -91,8 +98,12 @@ Write-Host '==> docker push'
 if ($LASTEXITCODE -ne 0) { Fail "docker push failed. Did you run: gcloud auth configure-docker ${Region}-docker.pkg.dev ?" }
 
 # --- Render manifest (substitute __IMAGE__) ---------------------------------
-$content = (Get-Content -Raw $manifest).Replace('__IMAGE__', $image)
-if ($content -match 'REPLACE_') {
+$content = $manifestRaw.Replace('__IMAGE__', $image)
+# Comment lines are excluded: the manifest's header documents the placeholders by name, so a
+# whole-file match would refuse to deploy even once every real value has been filled in.
+$placeholders = ($content -split "`r?`n") | Where-Object { $_ -match 'REPLACE_' -and $_ -notmatch '^\s*#' }
+if ($placeholders) {
+    Write-Host ($placeholders -join [Environment]::NewLine)
     Fail "$manifest still contains REPLACE_ placeholders. Fill in the Neon host and front-end origin before deploying."
 }
 $rendered = (New-TemporaryFile).FullName

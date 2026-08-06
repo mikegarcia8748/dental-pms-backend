@@ -1,20 +1,26 @@
 # Cloud Run service — DEV environment (containerized JVM, front-end dev/testing).
 #
 # Declarative Knative Service applied with:  gcloud run services replace service.dev.yaml --region <REGION>
-# deploy/deploy.ps1 substitutes the __IMAGE__ placeholder with the freshly built+pushed image.
+# This is the single source of truth for the dev service's configuration, and both deploy paths
+# apply this same file after substituting the image placeholder below with the built image
+# (written without the literal token, which a naive substitution would rewrite here too):
+#   - cloudbuild.yaml  — on every push, via the Cloud Build trigger (the normal path)
+#   - deploy/deploy.ps1 — from a developer machine, when you need to deploy out of band
+# Anything set outside this file (console edits, `gcloud run services update --flags`) is wiped
+# by the next deploy, which is the point: a revision's config is whatever git says it is.
 #
 # Fill in the REPLACE_* placeholders before the first deploy:
 #   - REPLACE_NEON_DEV_DIRECT_HOST : the DIRECT (non-pooled) endpoint host of your Neon *dev* branch
 #                                    (no "-pooler" in the hostname — Flyway's migration lock needs a real session).
-#   - REPLACE_FE_DEV_ORIGIN        : your front-end dev origin as host[:port] (no scheme), e.g. dev.app.example.com
-#   - REPLACE_FIREBASE_DEV_PROJECT_ID : the Firebase project whose ID tokens this environment accepts
 #
 # Secrets (DATABASE_PASSWORD, JWT_SECRET) are pulled from Secret Manager — create them once,
-# see docs/environments.md. Firebase needs no secret: tokens are verified against public keys.
+# see docs/overview/environments.md. Firebase needs no secret: tokens are verified against public keys.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: dental-pms-dev
+  # Must match the live Cloud Run service — `services replace` addresses the service by name,
+  # and a mismatch silently creates a second service on a different URL.
+  name: myapis
   annotations:
     run.googleapis.com/ingress: all
 spec:
@@ -37,7 +43,7 @@ spec:
               value: "dev"
             # DIRECT (non-pooled) Neon *dev* branch endpoint; sslmode=require.
             - name: DATABASE_URL
-              value: "jdbc:postgresql://REPLACE_NEON_DEV_DIRECT_HOST/dental_pms?sslmode=require"
+              value: "jdbc:postgresql://ep-quiet-smoke-azyguapi.c-3.ap-southeast-1.aws.neon.tech:5432/neondb"
             - name: DATABASE_USER
               value: "neondb_owner"
             - name: DATABASE_POOL_SIZE
