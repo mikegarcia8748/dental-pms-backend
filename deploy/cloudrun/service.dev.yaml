@@ -41,9 +41,14 @@ spec:
           env:
             - name: APP_ENV
               value: "dev"
-            # DIRECT (non-pooled) Neon *dev* branch endpoint; sslmode=require.
+            # DIRECT (non-pooled) Neon *dev* branch endpoint.
+            # sslmode=require is NOT optional: this hostname is a CNAME onto Neon's shared regional
+            # proxy (c-3.ap-southeast-1), so the proxy identifies the project from the TLS SNI name.
+            # On a plaintext connection it has no way to know which endpoint you meant and rejects
+            # the connection ("The endpoint ID is not specified"). Without this parameter pgjdbc
+            # defaults to sslmode=prefer, which is allowed to fall back to plaintext.
             - name: DATABASE_URL
-              value: "jdbc:postgresql://ep-quiet-smoke-azyguapi.c-3.ap-southeast-1.aws.neon.tech:5432/neondb"
+              value: "jdbc:postgresql://ep-quiet-smoke-azyguapi.c-3.ap-southeast-1.aws.neon.tech:5432/neondb?sslmode=require"
             - name: DATABASE_USER
               value: "neondb_owner"
             - name: DATABASE_POOL_SIZE
